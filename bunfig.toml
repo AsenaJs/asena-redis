@@ -1,0 +1,11 @@
+[test]
+coverage = true
+coverageSkipTestFiles = true
+
+coveragePathIgnorePatterns = [
+    "dist/**/*.js",
+    "dist/**/*.ts"
+]
+
+[test.reporter]
+junit = "junit.xml"

@@ -1,0 +1,68 @@
+{
+  "name": "@asenajs/asena-redis",
+  "version": "1.0.0",
+  "author": "LibirSoft",
+  "description": "Redis integration for AsenaJS - service client and multi-pod WebSocket transport",
+  "main": "dist/index.js",
+  "module": "index.ts",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "redis",
+    "asena",
+    "asenajs",
+    "bun",
+    "websocket",
+    "transport",
+    "ioc",
+    "dependency-injection",
+    "pub-sub",
+    "cache"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AsenaJs/asena-redis.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AsenaJs/asena-redis/issues"
+  },
+  "homepage": "https://asena.sh",
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "build": "bun run clean && tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "bun run build",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "bun run build && changeset publish"
+  },
+  "devDependencies": {
+    "@asenajs/asena": "^0.7.0",
+    "@changesets/cli": "^2.29.3",
+    "@types/bun": "latest",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "eslint": "^8.57.1",
+    "eslint-config-alloy": "^5.1.2",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-alloy": "^1.2.1",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-n": "^16.6.2",
+    "eslint-plugin-prettier": "^5.4.0",
+    "eslint-plugin-promise": "^6.6.0",
+    "prettier": "^3.5.3",
+    "reflect-metadata": "^0.2.2"
+  },
+  "peerDependencies": {
+    "@asenajs/asena": "^0.7.0",
+    "redis": "^5.11.0",
+    "reflect-metadata": "^0.2.2",
+    "typescript": "^5.8.2"
+  }
+}

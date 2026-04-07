@@ -1,0 +1,127 @@
+import { RedisClient } from 'bun';
+import type { RedisClientAdapter } from './RedisClientAdapter';
+
+export class BunRedisAdapter implements RedisClientAdapter {
+
+  private client: RedisClient;
+
+  public constructor(url?: string, opts?: Record<string, any>) {
+    this.client = new RedisClient(url, opts);
+  }
+
+  // Lifecycle
+
+  public get isConnected(): boolean {
+    return this.client.connected;
+  }
+
+  public async connect(): Promise<void> {
+    await this.client.connect();
+  }
+
+  public async disconnect(): Promise<void> {
+    this.client.close();
+  }
+
+  public async duplicate(): Promise<RedisClientAdapter> {
+    const dup = await this.client.duplicate();
+    const adapter = Object.create(BunRedisAdapter.prototype) as BunRedisAdapter;
+
+    (adapter as any).client = dup;
+
+    return adapter;
+  }
+
+  // String operations
+
+  public async get(key: string): Promise<string | null> {
+    return this.client.get(key);
+  }
+
+  public async set(key: string, value: string): Promise<void> {
+    await this.client.set(key, value);
+  }
+
+  public async del(key: string): Promise<number> {
+    return this.client.del(key);
+  }
+
+  public async exists(key: string): Promise<boolean> {
+    return this.client.exists(key);
+  }
+
+  public async incr(key: string): Promise<number> {
+    return this.client.incr(key);
+  }
+
+  public async decr(key: string): Promise<number> {
+    return this.client.decr(key);
+  }
+
+  // Expiration
+
+  public async expire(key: string, seconds: number): Promise<number> {
+    return this.client.expire(key, seconds);
+  }
+
+  public async ttl(key: string): Promise<number> {
+    return this.client.ttl(key);
+  }
+
+  public async keys(pattern: string): Promise<string[]> {
+    return this.client.keys(pattern);
+  }
+
+  // Hash operations
+
+  public async hget(key: string, field: string): Promise<string | null> {
+    return this.client.hget(key, field);
+  }
+
+  public async hmset(key: string, fields: string[]): Promise<void> {
+    await this.client.hmset(key, fields);
+  }
+
+  public async hmget(key: string, fields: string[]): Promise<(string | null)[]> {
+    return this.client.hmget(key, fields);
+  }
+
+  // Set operations
+
+  public async sadd(key: string, member: string): Promise<number> {
+    return this.client.sadd(key, member);
+  }
+
+  public async srem(key: string, member: string): Promise<number> {
+    return this.client.srem(key, member);
+  }
+
+  public async smembers(key: string): Promise<string[]> {
+    return this.client.smembers(key);
+  }
+
+  public async sismember(key: string, member: string): Promise<boolean> {
+    return this.client.sismember(key, member);
+  }
+
+  // Raw command
+
+  public async send(command: string, args: string[]): Promise<any> {
+    return this.client.send(command, args);
+  }
+
+  // Pub/Sub
+
+  public async publish(channel: string, message: string): Promise<number> {
+    return this.client.publish(channel, message);
+  }
+
+  public async subscribe(channel: string, listener: (message: string) => void): Promise<void> {
+    await this.client.subscribe(channel, listener);
+  }
+
+  public async unsubscribe(channel: string): Promise<void> {
+    await this.client.unsubscribe(channel);
+  }
+
+}
