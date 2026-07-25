@@ -4,4 +4,5 @@ export type {
   RedisOptions,
   RedisDecoratorOptions,
   RedisTransportOptions,
+  RedisMicroserviceOptions,
 } from './RedisConfig';

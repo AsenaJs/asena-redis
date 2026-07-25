@@ -2,8 +2,17 @@ import { RedisClient } from 'bun';
 import type { RedisClientAdapter } from './RedisClientAdapter';
 
 export class BunRedisAdapter implements RedisClientAdapter {
-
   private client: RedisClient;
+
+  private subscriptions?: Map<string, (message: string) => void>;
+
+  private resubscribeInstalled?: boolean;
+
+  private connectListeners?: Set<() => void>;
+
+  private closeListeners?: Set<() => void>;
+
+  private connectionEventsInstalled?: boolean;
 
   public constructor(url?: string, opts?: Record<string, any>) {
     this.client = new RedisClient(url, opts);
@@ -117,11 +126,94 @@ export class BunRedisAdapter implements RedisClientAdapter {
   }
 
   public async subscribe(channel: string, listener: (message: string) => void): Promise<void> {
+    // duplicate() builds instances via Object.create (no constructor run) -
+    // initialize the tracking state defensively
+    this.subscriptions ??= new Map();
+    this.subscriptions.set(channel, listener);
+    this.installResubscribe();
+
     await this.client.subscribe(channel, listener);
   }
 
   public async unsubscribe(channel: string): Promise<void> {
+    this.subscriptions?.delete(channel);
     await this.client.unsubscribe(channel);
   }
 
+  // Connection events
+
+  public onConnected(listener: () => void): void {
+    // duplicate() builds instances via Object.create (no constructor run) -
+    // initialize the tracking state defensively
+    this.connectListeners ??= new Set();
+    this.connectListeners.add(listener);
+    this.installConnectionEvents();
+  }
+
+  public onConnectionLost(listener: () => void): void {
+    this.closeListeners ??= new Set();
+    this.closeListeners.add(listener);
+    this.installConnectionEvents();
+  }
+
+  /**
+   * Bun's RedisClient exposes onconnect/onclose as single-assignment
+   * properties - claim them once and fan out, so resubscribe replay and
+   * external listeners (e.g. the transport's poisoning detection) coexist.
+   */
+  private installConnectionEvents(): void {
+    if (this.connectionEventsInstalled) return;
+
+    this.connectionEventsInstalled = true;
+
+    this.client.onconnect = () => {
+      for (const listener of this.connectListeners ?? []) {
+        try {
+          listener();
+        } catch {
+          // A listener error must not break the client's connect handling
+        }
+      }
+    };
+
+    this.client.onclose = () => {
+      for (const listener of this.closeListeners ?? []) {
+        try {
+          listener();
+        } catch {
+          // A listener error must not break the client's close handling
+        }
+      }
+    };
+  }
+
+  /**
+   * Bun's RedisClient reconnects the socket automatically, but server-side
+   * subscription state dies with the old connection and the client does NOT
+   * replay it. Without this hook a single broker blip silently kills every
+   * pub/sub consumer (e.g. the microservice reply channel) forever.
+   */
+  private installResubscribe(): void {
+    if (this.resubscribeInstalled) return;
+
+    this.resubscribeInstalled = true;
+
+    this.onConnected(() => {
+      const entries = [...(this.subscriptions ?? new Map())];
+
+      void (async () => {
+        for (const [channel, listener] of entries) {
+          try {
+            // Client-side listener registrations SURVIVE the reconnect, so a
+            // bare subscribe would register the listener a second time and
+            // deliver every message twice - clear first, then re-subscribe
+            await this.client.unsubscribe(channel);
+            await this.client.subscribe(channel, listener);
+          } catch {
+            // Redis went down again mid-replay - the next onconnect retries
+          }
+        }
+      })();
+    });
+  }
 }

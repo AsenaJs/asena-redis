@@ -20,7 +20,6 @@ interface NodeRedisMappedOptions {
  * Requires `redis` peer dependency: `bun add redis`
  */
 export class NodeRedisAdapter implements RedisClientAdapter {
-
   private client: any;
 
   public constructor(client: any) {
@@ -48,7 +47,16 @@ export class NodeRedisAdapter implements RedisClientAdapter {
    */
   // eslint-disable-next-line @typescript-eslint/member-ordering
   private static mapOptions(opts: Record<string, any>): NodeRedisMappedOptions {
-    const { connectionTimeout, idleTimeout, autoReconnect, maxRetries, enableOfflineQueue, enableAutoPipelining, tls, ...rest } = opts;
+    const {
+      connectionTimeout,
+      idleTimeout,
+      autoReconnect,
+      maxRetries,
+      enableOfflineQueue,
+      enableAutoPipelining,
+      tls,
+      ...rest
+    } = opts;
 
     const socket: Record<string, any> = {};
     const mapped: NodeRedisMappedOptions = { ...rest };
@@ -118,6 +126,19 @@ export class NodeRedisAdapter implements RedisClientAdapter {
     await dup.connect();
 
     return new NodeRedisAdapter(dup);
+  }
+
+  // Connection events - node-redis is an EventEmitter, so these map directly.
+  // Note node-redis rejects in-flight commands on disconnect (no reply-queue
+  // poisoning like Bun's client), so listeners here rarely have work to do.
+
+  public onConnected(listener: () => void): void {
+    this.client.on?.('ready', listener);
+  }
+
+  public onConnectionLost(listener: () => void): void {
+    this.client.on?.('reconnecting', listener);
+    this.client.on?.('end', listener);
   }
 
   // String operations
@@ -227,5 +248,4 @@ export class NodeRedisAdapter implements RedisClientAdapter {
   public async unsubscribe(channel: string): Promise<void> {
     await this.client.unsubscribe(channel);
   }
-
 }
