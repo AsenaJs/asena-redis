@@ -1,6 +1,6 @@
 {
   "name": "@asenajs/asena-redis",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "LibirSoft",
   "description": "Redis integration for AsenaJS - service client and multi-pod WebSocket transport",
   "main": "dist/index.js",
