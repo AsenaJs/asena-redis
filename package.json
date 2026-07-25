@@ -44,7 +44,7 @@
     "release": "bun run build && changeset publish"
   },
   "devDependencies": {
-    "@asenajs/asena": "^0.7.0",
+    "@asenajs/asena": "^0.8.0",
     "@changesets/cli": "^2.29.3",
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
@@ -60,7 +60,7 @@
     "reflect-metadata": "^0.2.2"
   },
   "peerDependencies": {
-    "@asenajs/asena": "^0.7.0",
+    "@asenajs/asena": "^0.8.0",
     "redis": "^5.11.0",
     "reflect-metadata": "^0.2.2",
     "typescript": "^5.8.2"

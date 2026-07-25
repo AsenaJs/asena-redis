@@ -42,6 +42,14 @@ export interface RedisClientAdapter {
   publish(channel: string, message: string): Promise<number>;
   subscribe(channel: string, listener: (message: string) => void): Promise<void>;
   unsubscribe(channel: string): Promise<void>;
+
+  // Connection events (optional - adapters without connection callbacks may omit them)
+
+  /** Registers a listener invoked every time the connection is (re-)established. */
+  onConnected?(listener: () => void): void;
+
+  /** Registers a listener invoked every time the connection is lost. */
+  onConnectionLost?(listener: () => void): void;
 }
 
 /**
