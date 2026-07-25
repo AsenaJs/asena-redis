@@ -45,24 +45,24 @@
   },
   "devDependencies": {
     "@asenajs/asena": "^0.8.0",
-    "@changesets/cli": "^2.29.3",
+    "@changesets/cli": "^2.31.1",
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "eslint": "^8.57.1",
     "eslint-config-alloy": "^5.1.2",
-    "eslint-config-prettier": "^9.1.0",
+    "eslint-config-prettier": "^9.1.2",
     "eslint-plugin-alloy": "^1.2.1",
-    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-n": "^16.6.2",
-    "eslint-plugin-prettier": "^5.4.0",
+    "eslint-plugin-prettier": "^5.5.6",
     "eslint-plugin-promise": "^6.6.0",
-    "prettier": "^3.5.3",
+    "prettier": "^3.9.6",
     "reflect-metadata": "^0.2.2"
   },
   "peerDependencies": {
     "@asenajs/asena": "^0.8.0",
-    "redis": "^5.11.0",
+    "redis": "^5.12.1",
     "reflect-metadata": "^0.2.2",
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.3"
   }
 }
