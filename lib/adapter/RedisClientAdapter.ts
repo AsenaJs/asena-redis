@@ -50,6 +50,24 @@ export interface RedisClientAdapter {
 
   /** Registers a listener invoked every time the connection is lost. */
   onConnectionLost?(listener: () => void): void;
+
+  /**
+   * Registers a listener invoked once a channel's subscription has actually
+   * been restored on the SERVER after a reconnect.
+   *
+   * A reconnect and a live subscription are two different facts. Redis drops
+   * every subscription with the socket, and restoring it costs at least one
+   * more round trip after the connection reports open - during which the
+   * server has no subscriber for the channel and everything published to it
+   * is dropped for good. Consumers that must not report themselves ready
+   * before their channel is served again (the microservice transport's reply
+   * channel) gate on this event, not on `onConnected`.
+   *
+   * Adapters whose client restores subscriptions inside its own reconnect
+   * handshake, before signalling readiness, may omit this - their connect
+   * event already carries the same meaning.
+   */
+  onResubscribed?(listener: (channel: string) => void): void;
 }
 
 /**

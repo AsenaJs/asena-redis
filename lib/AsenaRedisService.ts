@@ -6,7 +6,6 @@ import { buildRedisUrl } from './adapter';
 import type { RedisConfig, RedisOptions } from './types';
 
 export abstract class AsenaRedisService {
-
   protected _client: RedisClientAdapter | null = null;
 
   protected options: RedisOptions | null = null;
@@ -25,7 +24,9 @@ export abstract class AsenaRedisService {
         await this._client.connect();
       }
 
-      this.options.logger?.info(`Redis Connected (custom client)${this.options.config.name ? ` - ${this.options.config.name}` : ''}`);
+      this.options.logger?.info(
+        `Redis Connected (custom client)${this.options.config.name ? ` - ${this.options.config.name}` : ''}`,
+      );
 
       return;
     }
@@ -196,5 +197,4 @@ export abstract class AsenaRedisService {
 
     return this._client;
   }
-
 }

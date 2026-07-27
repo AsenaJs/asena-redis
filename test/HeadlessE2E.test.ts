@@ -74,7 +74,11 @@ describe('Headless E2E over Redis', () => {
       }
     }
 
-    const healthPort = Math.floor(Math.random() * 55000) + 10000;
+    // 10000-31999: above the well-known range and below the kernel's ephemeral floor
+    // (net.ipv4.ip_local_port_range, 32768-60999). Drawing a *server* port from the
+    // ephemeral range collides with the outbound sockets the suite itself holds open -
+    // including their 60s TIME_WAIT - and Bun.serve then fails with EADDRINUSE.
+    const healthPort = 10000 + Math.floor(Math.random() * 22000);
 
     server = await AsenaServerFactory.create({
       headless: true,

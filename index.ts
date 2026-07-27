@@ -16,4 +16,10 @@ export { Redis } from './lib/decorators';
 export type { RedisDecoratorOptions } from './lib/decorators';
 
 // Types
-export type { RedisConfig, TLSOptions, RedisOptions, RedisTransportOptions, RedisMicroserviceOptions } from './lib/types';
+export type {
+  RedisConfig,
+  TLSOptions,
+  RedisOptions,
+  RedisTransportOptions,
+  RedisMicroserviceOptions,
+} from './lib/types';

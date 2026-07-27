@@ -58,12 +58,7 @@ export async function xadd(
  * `start` defaults to '$' (only new entries). NOGROUP recovery passes '0' so
  * entries added between the group loss and re-creation are replayed, not skipped.
  */
-export async function xgroupCreate(
-  client: RedisClientAdapter,
-  key: string,
-  group: string,
-  start: string = '$',
-): Promise<void> {
+export async function xgroupCreate(client: RedisClientAdapter, key: string, group: string, start = '$'): Promise<void> {
   try {
     await client.send('XGROUP', ['CREATE', key, group, start, 'MKSTREAM']);
   } catch (error) {
@@ -114,6 +109,7 @@ export async function xreadgroup(
  */
 export async function xack(client: RedisClientAdapter, key: string, group: string, ids: string[]): Promise<void> {
   if (!ids.length) return;
+
   await client.send('XACK', [key, group, ...ids]);
 }
 
@@ -324,7 +320,10 @@ function parsePendingRows(reply: any): PendingEntry[] {
 
 function toArray(value: any): any[] {
   if (Array.isArray(value)) return value;
+
   if (value === null || value === undefined) return [];
+
   if (value instanceof Map) return Array.from(value.entries()).flat();
+
   return [value];
 }

@@ -22,12 +22,10 @@ describe('@Redis decorator', () => {
   it('should copy prototype methods from target', () => {
     @Redis({ config: { url: 'redis://localhost:6379' } })
     class CustomRedis extends AsenaRedisService {
-
       public customMethod(): string {
         return 'custom';
       }
-    
-}
+    }
 
     const instance = new CustomRedis();
 
@@ -37,10 +35,8 @@ describe('@Redis decorator', () => {
   it('should copy static properties from target', () => {
     @Redis({ config: { url: 'redis://localhost:6379' } })
     class StaticRedis extends AsenaRedisService {
-
       public static VERSION = '1.0.0';
-    
-}
+    }
 
     expect(StaticRedis.VERSION).toBe('1.0.0');
   });

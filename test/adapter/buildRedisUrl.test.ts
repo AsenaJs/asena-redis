@@ -8,8 +8,9 @@ describe('buildRedisUrl', () => {
     });
 
     it('should return url as-is when url already has auth', () => {
-      expect(buildRedisUrl({ url: 'redis://user:pass@localhost:6379', password: 'other' }))
-        .toBe('redis://user:pass@localhost:6379');
+      expect(buildRedisUrl({ url: 'redis://user:pass@localhost:6379', password: 'other' })).toBe(
+        'redis://user:pass@localhost:6379',
+      );
     });
 
     it('should inject password into url when url has no auth', () => {
@@ -36,49 +37,44 @@ describe('buildRedisUrl', () => {
     });
 
     it('should use custom host and port', () => {
-      expect(buildRedisUrl({ host: 'redis.example.com', port: 6380 }))
-        .toBe('redis://redis.example.com:6380');
+      expect(buildRedisUrl({ host: 'redis.example.com', port: 6380 })).toBe('redis://redis.example.com:6380');
     });
 
     it('should add password auth', () => {
-      expect(buildRedisUrl({ password: 'secret' }))
-        .toBe('redis://:secret@localhost:6379');
+      expect(buildRedisUrl({ password: 'secret' })).toBe('redis://:secret@localhost:6379');
     });
 
     it('should add username and password auth', () => {
-      expect(buildRedisUrl({ username: 'admin', password: 'secret' }))
-        .toBe('redis://admin:secret@localhost:6379');
+      expect(buildRedisUrl({ username: 'admin', password: 'secret' })).toBe('redis://admin:secret@localhost:6379');
     });
 
     it('should add database number', () => {
-      expect(buildRedisUrl({ db: 2 }))
-        .toBe('redis://localhost:6379/2');
+      expect(buildRedisUrl({ db: 2 })).toBe('redis://localhost:6379/2');
     });
 
     it('should use rediss:// for TLS', () => {
-      expect(buildRedisUrl({ tls: true }))
-        .toBe('rediss://localhost:6379');
+      expect(buildRedisUrl({ tls: true })).toBe('rediss://localhost:6379');
     });
 
     it('should use rediss:// for TLS options object', () => {
-      expect(buildRedisUrl({ tls: { rejectUnauthorized: false } }))
-        .toBe('rediss://localhost:6379');
+      expect(buildRedisUrl({ tls: { rejectUnauthorized: false } })).toBe('rediss://localhost:6379');
     });
 
     it('should combine all options', () => {
-      expect(buildRedisUrl({
-        host: 'redis.prod.com',
-        port: 6380,
-        username: 'app',
-        password: 'p@ss',
-        db: 1,
-        tls: true,
-      })).toBe('rediss://app:p@ss@redis.prod.com:6380/1');
+      expect(
+        buildRedisUrl({
+          host: 'redis.prod.com',
+          port: 6380,
+          username: 'app',
+          password: 'p@ss',
+          db: 1,
+          tls: true,
+        }),
+      ).toBe('rediss://app:p@ss@redis.prod.com:6380/1');
     });
 
     it('should handle db: 0', () => {
-      expect(buildRedisUrl({ db: 0 }))
-        .toBe('redis://localhost:6379/0');
+      expect(buildRedisUrl({ db: 0 })).toBe('redis://localhost:6379/0');
     });
   });
 });

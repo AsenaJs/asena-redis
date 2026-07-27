@@ -63,13 +63,20 @@ class TcpProxy {
                 client.data.upstream = upstream;
 
                 for (const chunk of client.data.pending) upstream.write(chunk);
+
                 client.data.pending = [];
               },
               data: (_upstream, chunk) => {
                 client.write(chunk);
               },
-              close: () => client.end(),
-              error: () => client.end(),
+              // Braces, not an expression body: Socket.end() returns a number and the
+              // handler signature is `void | Promise<void>`.
+              close: () => {
+                client.end();
+              },
+              error: () => {
+                client.end();
+              },
             },
           }).catch(() => client.end());
         },

@@ -22,6 +22,8 @@ interface NodeRedisMappedOptions {
 export class NodeRedisAdapter implements RedisClientAdapter {
   private client: any;
 
+  private subscriptions = new Set<string>();
+
   public constructor(client: any) {
     this.client = client;
   }
@@ -53,7 +55,10 @@ export class NodeRedisAdapter implements RedisClientAdapter {
       autoReconnect,
       maxRetries,
       enableOfflineQueue,
-      enableAutoPipelining,
+      // Pulled out of `rest` on purpose so it never reaches node-redis, which pipelines
+      // automatically and rejects the unknown key. Accepted for API parity with the Bun
+      // adapter and intentionally unmapped.
+      enableAutoPipelining: _enableAutoPipelining,
       tls,
       ...rest
     } = opts;
@@ -125,7 +130,11 @@ export class NodeRedisAdapter implements RedisClientAdapter {
 
     await dup.connect();
 
-    return new NodeRedisAdapter(dup);
+    // `this.constructor`, not the literal class: a user subclass added for instrumentation
+    // would otherwise be downgraded to a plain NodeRedisAdapter on every duplicate.
+    const Ctor = this.constructor as new (client: typeof dup) => NodeRedisAdapter;
+
+    return new Ctor(dup);
   }
 
   // Connection events - node-redis is an EventEmitter, so these map directly.
@@ -139,6 +148,18 @@ export class NodeRedisAdapter implements RedisClientAdapter {
   public onConnectionLost(listener: () => void): void {
     this.client.on?.('reconnecting', listener);
     this.client.on?.('end', listener);
+  }
+
+  /**
+   * node-redis replays its subscriptions inside the socket initiator and only
+   * emits `ready` once that has resolved, so `ready` already means "the server
+   * is serving these channels again" - unlike Bun's client, which needs the
+   * adapter to replay them after the connect event.
+   */
+  public onResubscribed(listener: (channel: string) => void): void {
+    this.client.on?.('ready', () => {
+      for (const channel of this.subscriptions) listener(channel);
+    });
   }
 
   // String operations
@@ -243,9 +264,11 @@ export class NodeRedisAdapter implements RedisClientAdapter {
 
   public async subscribe(channel: string, listener: (message: string) => void): Promise<void> {
     await this.client.subscribe(channel, listener);
+    this.subscriptions.add(channel);
   }
 
   public async unsubscribe(channel: string): Promise<void> {
+    this.subscriptions.delete(channel);
     await this.client.unsubscribe(channel);
   }
 }
