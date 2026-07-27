@@ -295,6 +295,7 @@ describe('RedisMicroserviceTransport', () => {
     while (Date.now() - start < 10000) {
       dlqEntries = await inspector.send('XRANGE', [`${streamPrefix}:dlq`, '-', '+']);
       if (Array.isArray(dlqEntries) && dlqEntries.length) break;
+
       await sleep(200);
     }
 
@@ -443,6 +444,7 @@ describe('RedisMicroserviceTransport', () => {
 
       names = consumers.map((consumer) => consumer.name);
       if (!names.includes('ghost')) break;
+
       await sleep(200);
     }
 
@@ -504,7 +506,7 @@ describe('RedisMicroserviceTransport', () => {
 
     const caller = await createTransport({ serviceName: 'caller', streamPrefix });
 
-    expect(await caller.send('order.echo', { n: 1 }, { timeout: 5000 })).toEqual({ echoed: 1 });
+    expect(await caller.send<{ echoed: number }>('order.echo', { n: 1 }, { timeout: 5000 })).toEqual({ echoed: 1 });
 
     // Sever every pub/sub connection: reply channels die server-side. Bun
     // reconnects the socket but does NOT replay subscriptions - without the

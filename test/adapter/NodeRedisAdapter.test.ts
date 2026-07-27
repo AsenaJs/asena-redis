@@ -225,12 +225,16 @@ describe('NodeRedisAdapter', () => {
       });
 
       // Give subscriber time to settle
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
 
       await adapter.publish(channel, 'hello-node-redis');
 
       // Wait for delivery
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 200);
+      });
 
       expect(received).toContain('hello-node-redis');
 

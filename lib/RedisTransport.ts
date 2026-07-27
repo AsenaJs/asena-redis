@@ -16,7 +16,6 @@ interface TransportEnvelope {
 }
 
 export class RedisTransport implements WebSocketTransport {
-
   private server!: Server<WebSocketData>;
 
   private readonly podId = crypto.randomUUID();
@@ -118,5 +117,4 @@ export class RedisTransport implements WebSocketTransport {
   private isRedisService(source: AsenaRedisService | RedisConfig): source is AsenaRedisService {
     return typeof (source as AsenaRedisService).createSubscriber === 'function';
   }
-
 }

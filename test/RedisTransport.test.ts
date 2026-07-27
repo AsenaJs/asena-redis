@@ -6,11 +6,9 @@ import type { RedisOptions } from '../lib/types';
 const REDIS_URL = 'redis://localhost:6379';
 
 class TestRedisService extends AsenaRedisService {
-
   public initWithOptions(options: RedisOptions) {
     this.setRedisOptions(options);
   }
-
 }
 
 function createMockServer() {
@@ -18,7 +16,9 @@ function createMockServer() {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {setTimeout(resolve, ms)});
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 describe('RedisTransport', () => {
@@ -128,7 +128,7 @@ describe('RedisTransport', () => {
     it('should deliver string messages to other pods', async () => {
       const channel = `test:crosspod:${Date.now()}`;
       const { transport: transportA, server: serverA } = await createTransport({ url: REDIS_URL }, channel);
-      const { transport: transportB, server: serverB } = await createTransport({ url: REDIS_URL }, channel);
+      const { server: serverB } = await createTransport({ url: REDIS_URL }, channel);
 
       // Give subscribers time to settle
       await sleep(100);

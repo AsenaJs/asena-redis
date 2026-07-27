@@ -6,11 +6,9 @@ const REDIS_URL = 'redis://localhost:6379';
 const TEST_PREFIX = 'asena:test:';
 
 class TestRedisService extends AsenaRedisService {
-
   public initWithOptions(options: RedisOptions) {
     this.setRedisOptions(options);
   }
-
 }
 
 function testKey(name: string): string {

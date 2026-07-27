@@ -6,11 +6,9 @@ import type { RedisOptions } from '../lib/types';
 const INVALID_URL = 'redis://localhost:19999';
 
 class TestRedisService extends AsenaRedisService {
-
   public initWithOptions(options: RedisOptions) {
     this.setRedisOptions(options);
   }
-
 }
 
 function createMockServer() {
@@ -52,7 +50,12 @@ describe('Connection Failure — AsenaRedisService', () => {
 
 describe('Connection Failure — RedisTransport', () => {
   it('should throw on init with invalid config', async () => {
-    const transport = new RedisTransport({ host: 'localhost', port: 19999, autoReconnect: false, connectionTimeout: 1000 });
+    const transport = new RedisTransport({
+      host: 'localhost',
+      port: 19999,
+      autoReconnect: false,
+      connectionTimeout: 1000,
+    });
     const server = createMockServer();
 
     await expect(transport.init(server)).rejects.toThrow();
