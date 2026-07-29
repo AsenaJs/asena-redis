@@ -1,6 +1,6 @@
 {
   "name": "@asenajs/asena-redis",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "author": "LibirSoft",
   "description": "Redis integration for AsenaJS - service client and multi-pod WebSocket transport",
   "main": "dist/index.js",
@@ -54,7 +54,7 @@
     "check:fix": "bun run lint:fix && bun run format"
   },
   "devDependencies": {
-    "@asenajs/asena": "^0.9.0",
+    "@asenajs/asena": "^0.10.0",
     "@changesets/cli": "^2.31.1",
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
@@ -70,7 +70,7 @@
     "reflect-metadata": "^0.2.2"
   },
   "peerDependencies": {
-    "@asenajs/asena": "^0.9.0",
+    "@asenajs/asena": "^0.10.0",
     "redis": "^5.12.1",
     "reflect-metadata": "^0.2.2",
     "typescript": "^5.9.3"
