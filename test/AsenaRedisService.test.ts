@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from 'bun:test';
 import { AsenaRedisService } from '../lib/AsenaRedisService';
+import type { RedisClientAdapter } from '../lib/adapter';
 import type { RedisOptions } from '../lib/types';
 
 const REDIS_URL = 'redis://localhost:6379';
@@ -8,6 +9,44 @@ const TEST_PREFIX = 'asena:test:';
 class TestRedisService extends AsenaRedisService {
   public initWithOptions(options: RedisOptions) {
     this.setRedisOptions(options);
+  }
+}
+
+/**
+ * A connection whose close path the test dictates. Only the members the service touches are
+ * implemented - it never reaches Redis, which is the point: a real duplicate cannot be made
+ * to fail on close.
+ */
+class FakeConnection {
+  public isConnected = true;
+
+  /** Handed out by duplicate() in order, so a test picks which subscriber breaks. */
+  public readonly duplicates: FakeConnection[] = [];
+
+  private handedOut = 0;
+
+  public constructor(private readonly closeFails = false) {}
+
+  public async connect(): Promise<void> {
+    this.isConnected = true;
+  }
+
+  public async disconnect(): Promise<void> {
+    if (this.closeFails) {
+      throw new Error('subscriber close failed');
+    }
+
+    this.isConnected = false;
+  }
+
+  public async duplicate(): Promise<RedisClientAdapter> {
+    const subscriber = this.duplicates[this.handedOut++];
+
+    if (!subscriber) {
+      throw new Error('no duplicate prepared for this test');
+    }
+
+    return subscriber as unknown as RedisClientAdapter;
   }
 }
 
@@ -66,6 +105,96 @@ describe('AsenaRedisService', () => {
       const s = new TestRedisService();
 
       await s.disconnect(); // should not throw
+    });
+  });
+
+  // Stop hook - the sockets a server.stop() has to leave closed
+
+  describe('Stop hook', () => {
+    it('should close the client and every subscriber it handed out', async () => {
+      const s = new TestRedisService();
+
+      s.initWithOptions({ config: { url: REDIS_URL } });
+      await s.onStart();
+
+      const first = await s.createSubscriber();
+      const second = await s.createSubscriber();
+
+      await s.onStop();
+
+      expect(await s.testConnection()).toBe(false);
+      expect(first.isConnected).toBe(false);
+      expect(second.isConnected).toBe(false);
+    });
+
+    it('should tolerate a subscriber its owner already closed', async () => {
+      const s = new TestRedisService();
+
+      s.initWithOptions({ config: { url: REDIS_URL } });
+      await s.onStart();
+
+      // What RedisTransport.destroy() does with the subscriber it asked for
+      const subscriber = await s.createSubscriber();
+
+      await subscriber.disconnect();
+
+      await s.onStop(); // should not throw
+
+      expect(await s.testConnection()).toBe(false);
+    });
+
+    it('should close the rest when one subscriber fails to close', async () => {
+      const logged: unknown[] = [];
+      const client = new FakeConnection();
+      const failing = new FakeConnection(true);
+      const healthy = new FakeConnection();
+
+      client.duplicates.push(failing, healthy);
+
+      const s = new TestRedisService();
+
+      s.initWithOptions({
+        config: { url: REDIS_URL },
+        client: client as unknown as RedisClientAdapter,
+        logger: { info: () => {}, error: (...args: unknown[]) => logged.push(args) } as any,
+      });
+      await s.onStart();
+      await s.createSubscriber();
+      await s.createSubscriber();
+
+      await s.onStop();
+
+      expect(healthy.isConnected).toBe(false);
+      expect(client.isConnected).toBe(false);
+      expect(logged).toHaveLength(1);
+    });
+
+    it('should not close subscribers on a plain disconnect()', async () => {
+      const s = new TestRedisService();
+
+      s.initWithOptions({ config: { url: REDIS_URL } });
+      await s.onStart();
+
+      const subscriber = await s.createSubscriber();
+
+      // disconnect() drops the main connection only - a caller reading from its own
+      // subscriber keeps it
+      await s.disconnect();
+
+      expect(subscriber.isConnected).toBe(true);
+
+      await subscriber.disconnect();
+    });
+
+    it('should survive a stop that runs twice', async () => {
+      const s = new TestRedisService();
+
+      s.initWithOptions({ config: { url: REDIS_URL } });
+      await s.onStart();
+      await s.createSubscriber();
+
+      await s.onStop();
+      await s.onStop(); // should not throw
     });
   });
 

@@ -1,4 +1,4 @@
-import { PostConstruct } from '@asenajs/asena/decorators/ioc';
+import { OnStart, OnStop } from '@asenajs/asena/decorators/ioc';
 import type { RedisClientAdapter } from './adapter';
 import { BunRedisAdapter } from './adapter';
 import { NodeRedisAdapter } from './adapter';
@@ -10,7 +10,21 @@ export abstract class AsenaRedisService {
 
   protected options: RedisOptions | null = null;
 
-  @PostConstruct()
+  /**
+   * Every connection handed out by {@link createSubscriber}.
+   *
+   * A duplicate is a second socket that the parent client knows nothing about, so closing the
+   * main client leaves it open - and nothing else holds a reference to it either once the
+   * caller drops its own. Without this list a subscriber survives the server it belongs to.
+   *
+   * Entries are never dropped on `isConnected`: a client in the middle of an automatic
+   * reconnect reports itself disconnected, and forgetting it there would put us back where we
+   * started - an open socket nobody closes. `createSubscriber()` is a setup-time call (one per
+   * pub/sub consumer), so the set stays small.
+   */
+  private readonly subscribers = new Set<RedisClientAdapter>();
+
+  @OnStart()
   public async onStart() {
     if (!this.options) {
       throw new Error('Redis options not initialized. Make sure to use @Redis decorator properly.');
@@ -156,10 +170,28 @@ export abstract class AsenaRedisService {
   }
 
   public async createSubscriber(): Promise<RedisClientAdapter> {
-    return this.getClient().duplicate();
+    const subscriber = await this.getClient().duplicate();
+
+    this.subscribers.add(subscriber);
+
+    return subscriber;
   }
 
   // Lifecycle
+
+  /**
+   * Releases every connection this service opened: the subscribers first, then the client
+   * they were duplicated from.
+   *
+   * Runs while the component's own dependencies are still up and the HTTP surface is already
+   * down. `disconnect()` stays as it was - a caller that closes the main connection by hand
+   * keeps a subscriber it is still reading from.
+   */
+  @OnStop()
+  public async onStop(): Promise<void> {
+    await this.closeSubscribers();
+    await this.disconnect();
+  }
 
   public async disconnect(): Promise<void> {
     if (this._client) {
@@ -188,6 +220,35 @@ export abstract class AsenaRedisService {
 
   protected setRedisClient(client: RedisClientAdapter): void {
     this._client = client;
+  }
+
+  /**
+   * Closes every tracked subscriber, all of them regardless of what any single one does.
+   *
+   * A subscriber is routinely closed by its owner first (the WebSocket transport closes the
+   * one it asked for in `destroy()`), and a second close on a dead socket throws on some
+   * clients. Neither that nor a genuinely broken connection may strand the subscribers behind
+   * it or the main client, which is the connection the whole shutdown is about - so failures
+   * are collected, logged and stepped over.
+   *
+   * The list is cleared up front so a stop that runs twice does not try the same dead
+   * connections again.
+   */
+  private async closeSubscribers(): Promise<void> {
+    const subscribers = [...this.subscribers];
+
+    this.subscribers.clear();
+
+    // The async wrapper is what makes a subscriber that throws *synchronously* - a custom
+    // adapter, not the ones shipped here - a rejected promise instead of an exception that
+    // escapes before allSettled ever sees the batch.
+    const results = await Promise.allSettled(subscribers.map(async (subscriber) => subscriber.disconnect()));
+
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.options?.logger?.error('Redis subscriber disconnect failed:', result.reason);
+      }
+    }
   }
 
   private getClient(): RedisClientAdapter {

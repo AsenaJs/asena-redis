@@ -24,7 +24,7 @@ Your existing `@Redis` decorated service gives you full Redis operations with au
 ## Requirements
 
 - [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.9.0 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
 
 ## Installation
 
@@ -214,7 +214,10 @@ interface RedisConfig {
 - `client` - Access underlying `RedisClientAdapter`
 - `createSubscriber()` - Create a duplicate connection for pub/sub
 - `testConnection()` - Returns `true` if connected
-- `disconnect()` - Close connection
+- `disconnect()` - Close the main connection (subscribers stay open)
+
+`server.stop()` closes the service connection **and** every subscriber `createSubscriber()` handed
+out - no manual teardown needed.
 
 ## Contributing
 

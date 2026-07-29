@@ -1,5 +1,25 @@
 # @asenajs/asena-redis
 
+## 3.0.0
+
+### Major Changes
+
+- `@OnStop` releases the connection, and the core peer moves to `^0.10.0`
+
+  Nothing in the framework ever called `AsenaRedisService.disconnect()`, so every `@Redis` service
+  held an open socket past `server.stop()` — and `Website/docs/packages/redis.md` claimed the
+  opposite. `server.stop()` now closes the service's connection **and** every connection handed out
+  by `createSubscriber()`, which were previously untracked and impossible to close.
+
+  `@PostConstruct` on `onStart()` is now `@OnStart` — the same metadata key, renamed with the core.
+
+  **Breaking:**
+
+  - Requires `@asenajs/asena@^0.10.0`. A 0.9.x application cannot use this version.
+  - A client supplied through `@Redis({ client })` is now closed on `server.stop()` as well. It was
+    always what `disconnect()` did; nothing called `disconnect()` before. If you share one client
+    across two services, the first stop hook closes it for both.
+
 ## 2.0.0
 
 ### Major Changes
