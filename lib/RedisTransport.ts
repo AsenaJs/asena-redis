@@ -58,10 +58,8 @@ export class RedisTransport implements WebSocketTransport {
   }
 
   public publish(topic: string, data: string | ArrayBuffer | ArrayBufferView): void {
-    // Local delivery
     this.server.publish(topic, data as string | ArrayBuffer);
 
-    // Remote delivery via Redis
     this.publishRemote(topic, data);
   }
 
@@ -81,7 +79,9 @@ export class RedisTransport implements WebSocketTransport {
     if (typeof data === 'string') {
       envelope = { d: data, t: topic, o: this.podId };
     } else {
-      const buffer = Buffer.from(data instanceof ArrayBuffer ? data : data.buffer);
+      // A view's `buffer` is the whole backing store - offset/length keep a partial view from sending the rest of it.
+      const buffer =
+        data instanceof ArrayBuffer ? Buffer.from(data) : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 
       envelope = { d: buffer.toString('base64'), t: topic, o: this.podId, b: 1 };
     }

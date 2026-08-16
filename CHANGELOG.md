@@ -18,6 +18,14 @@
   Pairs with `@asenajs/asena` 0.10.1, which is what calls it. Against `0.10.0` — which the `^0.10.0`
   peer range still allows — the method is simply never called and behaviour is what it was.
 
+  **Binary payloads carry only the bytes the caller passed.** A partial `ArrayBufferView` was encoded
+  as `Buffer.from(data.buffer)`, which is the whole backing store rather than the view, so
+  `socket.publishBinary('room', new Uint8Array(frame, 8, 16))` put the entire underlying buffer on the
+  wire. Local subscribers got the 16 bytes through `ws.publishBinary()` while every other pod got the
+  full store — the two halves of one broadcast disagreed. The bug predates this release inside
+  `publish()`; extracting `publishRemote()` made that line the standard route for binary
+  `socket.publish()`, so it is fixed here rather than carried forward.
+
 ## 3.0.0
 
 ### Major Changes

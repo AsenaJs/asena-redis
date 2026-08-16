@@ -137,12 +137,17 @@ transport() {
 
 ### How It Works
 
-Each server instance gets a unique pod ID. When a WebSocket message is published:
+Each server instance gets a unique pod ID. When a message is published through the server
+(`socket.to()` / `socket.in()`):
 
 1. The message is delivered locally via `server.publish()`
 2. The message is sent to Redis pub/sub with the originating pod ID
 3. Other pods receive the message and deliver it to their local sockets
 4. Messages from the same pod are deduplicated automatically
+
+`socket.publish()` takes a different route: it excludes the sender, so it does local delivery
+itself with `ws.publish()` and asks the transport only for step 2 onwards via `publishRemote()`.
+Steps 3 and 4 are unchanged. This requires `@asenajs/asena` 0.10.1 or newer.
 
 ### Options
 
