@@ -29,7 +29,7 @@
     },
   },
   "packages": {
-    "@asenajs/asena": ["@asenajs/asena@0.10.0", "", { "dependencies": { "reflect-metadata": "^0.2.2" } }, "sha512-9UIjCWQARpWV5UWthaMPBVstN2/VTysGLSGV44MO8qeN6PSPhIa92jNgbMeVru1/d0MtJWiPjZnYV2g2ky8OeQ=="],
+    "@asenajs/asena": ["@asenajs/asena@0.10.1", "", { "dependencies": { "reflect-metadata": "^0.2.2" } }, "sha512-55b6IHJIAGMzs+Xwi4Gyk7sb9aCAFgcM3vyfF5+zoGUjdkAA3tsM711sqM4o7lW/Lo3nFyFaBK3ZvrBfPrGHJg=="],
 
     "@babel/runtime": ["@babel/runtime@7.29.7", "", {}, "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="],
 
