@@ -188,6 +188,87 @@ describe('RedisTransport', () => {
     });
   });
 
+  /**
+   * `publishRemote()` is the wire half of `publish()`, and the reason `socket.publish()` can keep
+   * excluding the sender once a transport is configured: the caller has already done local
+   * delivery with Bun's socket-level `ws.publish()`, which is the only primitive that leaves the
+   * publisher out. Doing `server.publish()` here as well would deliver the message locally twice
+   * and put it back on the socket that sent it — the duplicate frame this whole fix started from.
+   */
+  describe('publishRemote()', () => {
+    it('should not deliver locally', async () => {
+      const { transport, server } = await createTransport({ url: REDIS_URL });
+
+      transport.publishRemote('test-topic', 'hello');
+
+      expect(server.publish).not.toHaveBeenCalled();
+    });
+
+    it('should still reach other pods', async () => {
+      const channel = `test:remoteonly:${Date.now()}`;
+      const { transport: transportA, server: serverA } = await createTransport({ url: REDIS_URL }, channel);
+      const { server: serverB } = await createTransport({ url: REDIS_URL }, channel);
+
+      await sleep(100);
+
+      transportA.publishRemote('room-1', 'hello from A');
+
+      await sleep(200);
+
+      // A's own envelope comes back on the wire and is dropped by the podId dedup.
+      expect(serverA.publish).not.toHaveBeenCalled();
+
+      expect(serverB.publish).toHaveBeenCalledTimes(1);
+      expect(serverB.publish.mock.calls[0][0]).toBe('room-1');
+      expect(serverB.publish.mock.calls[0][1]).toBe('hello from A');
+    });
+
+    it('should carry binary payloads to other pods', async () => {
+      const channel = `test:remotebin:${Date.now()}`;
+      const { transport: transportA } = await createTransport({ url: REDIS_URL }, channel);
+      const { server: serverB } = await createTransport({ url: REDIS_URL }, channel);
+
+      await sleep(100);
+
+      const original = new TextEncoder().encode('binary remote only');
+
+      transportA.publishRemote('bin-room', original.buffer);
+
+      await sleep(200);
+
+      expect(serverB.publish).toHaveBeenCalledTimes(1);
+
+      const received = serverB.publish.mock.calls[0][1];
+
+      expect(received).toBeInstanceOf(ArrayBuffer);
+      expect(new TextDecoder().decode(new Uint8Array(received))).toBe('binary remote only');
+    });
+
+    it('should carry only the bytes a partial view covers', async () => {
+      const channel = `test:remoteview:${Date.now()}`;
+      const { transport: transportA } = await createTransport({ url: REDIS_URL }, channel);
+      const { server: serverB } = await createTransport({ url: REDIS_URL }, channel);
+
+      await sleep(100);
+
+      const backing = new Uint8Array(32).fill(0xaa);
+      const view = new Uint8Array(backing.buffer, 8, 5);
+
+      view.set([1, 2, 3, 4, 5]);
+
+      transportA.publishRemote('view-room', view);
+
+      await sleep(200);
+
+      expect(serverB.publish).toHaveBeenCalledTimes(1);
+
+      const received = new Uint8Array(serverB.publish.mock.calls[0][1]);
+
+      expect(received.byteLength).toBe(5);
+      expect(Array.from(received)).toEqual([1, 2, 3, 4, 5]);
+    });
+  });
+
   // destroy
 
   describe('destroy()', () => {

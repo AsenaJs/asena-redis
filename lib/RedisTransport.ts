@@ -58,16 +58,30 @@ export class RedisTransport implements WebSocketTransport {
   }
 
   public publish(topic: string, data: string | ArrayBuffer | ArrayBufferView): void {
-    // Local delivery
     this.server.publish(topic, data as string | ArrayBuffer);
 
-    // Remote delivery via Redis
+    this.publishRemote(topic, data);
+  }
+
+  /**
+   * Cross-pod delivery only - no `server.publish()`.
+   *
+   * `AsenaSocket.publish()` calls this after doing local delivery itself with `ws.publish()`,
+   * which is the only Bun primitive that excludes the publishing socket. Doing local delivery
+   * here as well would both duplicate the message locally and put it back on the sender.
+   *
+   * Other pods receive it through `handleMessage()`, which drops envelopes carrying our own
+   * `podId` - so this pod does not get the message a second time off the wire either.
+   */
+  public publishRemote(topic: string, data: string | ArrayBuffer | ArrayBufferView): void {
     let envelope: TransportEnvelope;
 
     if (typeof data === 'string') {
       envelope = { d: data, t: topic, o: this.podId };
     } else {
-      const buffer = Buffer.from(data instanceof ArrayBuffer ? data : data.buffer);
+      // A view's `buffer` is the whole backing store - offset/length keep a partial view from sending the rest of it.
+      const buffer =
+        data instanceof ArrayBuffer ? Buffer.from(data) : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 
       envelope = { d: buffer.toString('base64'), t: topic, o: this.podId, b: 1 };
     }
