@@ -210,9 +210,12 @@ describe('RedisMicroserviceTransport - publisher poisoning & shutdown', () => {
     await waitFor(() => received.includes('evt.warmup'));
 
     // Kill the publisher socket while the XADD is in flight: without the
-    // guard this promise would NEVER settle (the original H1 finding)
+    // guard this promise would NEVER settle (the original H1 finding).
+    // Bun >= 1.4 rejects the in-flight command itself ("Connection closed")
+    // instead of leaving it for the watchdog - either way the connection is
+    // poisoned and swapped, which evt.after-swap below proves
     proxy.killOnMarker = 'poison-me';
-    await expect(producer.emit('evt.poison-me', {})).rejects.toThrow(/wedged/);
+    await expect(producer.emit('evt.poison-me', {})).rejects.toThrow(/wedged|Connection closed/);
     proxy.killOnMarker = undefined;
 
     // The poisoned connection was replaced - publishing works again
