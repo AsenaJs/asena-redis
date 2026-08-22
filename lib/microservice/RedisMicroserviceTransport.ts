@@ -61,6 +61,17 @@ interface PublisherState {
 }
 
 /**
+ * Bun's RedisClient rejects in-flight commands with ERR_REDIS_CONNECTION_CLOSED once it
+ * notices the socket is gone; other client libraries phrase the same failure as a plain
+ * "Connection closed".
+ */
+const isConnectionClosedError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+
+  return error.message.includes('ERR_REDIS_CONNECTION_CLOSED') || error.message.includes('Connection closed');
+};
+
+/**
  * @description Production-grade Redis Streams microservice transport.
  *
  * Delivery model:
@@ -618,18 +629,7 @@ export class RedisMicroserviceTransport implements MicroserviceTransport {
     const used: { state?: PublisherState } = {};
     const call = this.publisherCallOnce(fn, used);
 
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const winner = await Promise.race([
-      call,
-      new Promise<typeof WEDGED>((resolve) => {
-        timer = setTimeout(() => resolve(WEDGED), this.commandTimeout);
-      }),
-    ]).finally(() => clearTimeout(timer));
-
-    if (winner === WEDGED) {
-      call.catch(() => {});
-
+    const poisonIfCurrent = (reason: string): void => {
       const state = used.state;
 
       // Poison only the connection the call actually ran on - a call that was
@@ -637,17 +637,44 @@ export class RedisMicroserviceTransport implements MicroserviceTransport {
       if (state && !state.poisoned && this.publisherState === state && !this.destroyed) {
         state.poisoned = true;
         console.error(
-          `RedisMicroserviceTransport(${this.serviceName}): publisher command ${label} exceeded ${this.commandTimeout}ms - connection wedged, replacing`,
+          `RedisMicroserviceTransport(${this.serviceName}): publisher command ${label} ${reason} - replacing connection`,
         );
         void this.swapPublisher(state).catch(() => {});
       }
+    };
 
-      throw new Error(
-        `publisher command ${label} exceeded commandTimeout (${this.commandTimeout}ms) - connection wedged, replaced`,
-      );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const winner = await Promise.race([
+        call,
+        new Promise<typeof WEDGED>((resolve) => {
+          timer = setTimeout(() => resolve(WEDGED), this.commandTimeout);
+        }),
+      ]).finally(() => clearTimeout(timer));
+
+      if (winner === WEDGED) {
+        call.catch(() => {});
+
+        poisonIfCurrent(`exceeded ${this.commandTimeout}ms - connection wedged`);
+
+        throw new Error(
+          `publisher command ${label} exceeded commandTimeout (${this.commandTimeout}ms) - connection wedged, replaced`,
+        );
+      }
+
+      return winner as T;
+    } catch (error) {
+      // Bun >= 1.4 rejects the in-flight command itself when the connection
+      // drops, instead of leaving it pending for the watchdog - run the same
+      // poison-and-swap on that path, or every later command waits on a
+      // connection nobody will replace
+      if (isConnectionClosedError(error)) {
+        poisonIfCurrent('failed on a closed connection');
+      }
+
+      throw error;
     }
-
-    return winner as T;
   }
 
   private async publisherCallOnce<T>(
