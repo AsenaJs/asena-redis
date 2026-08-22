@@ -4,9 +4,9 @@
 
 # @asenajs/asena-redis
 
-[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](https://github.com/AsenaJs/asena-redis)
+[![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](https://github.com/AsenaJs/asena-redis)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Bun Version](https://img.shields.io/badge/Bun-1.3.12%2B-blueviolet)](https://bun.sh)
+[![Bun Version](https://img.shields.io/badge/Bun-1.4%2B-blueviolet)](https://bun.sh)
 
 Redis integration for AsenaJS — service client with built-in multi-pod WebSocket transport.
 
@@ -23,8 +23,8 @@ Your existing `@Redis` decorated service gives you full Redis operations with au
 
 ## Requirements
 
-- [Bun](https://bun.sh) v1.3.12 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.0 or higher
+- [Bun](https://bun.sh) v1.4 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.1 or higher
 
 ## Installation
 
