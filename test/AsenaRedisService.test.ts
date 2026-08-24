@@ -353,6 +353,81 @@ describe('AsenaRedisService', () => {
     });
   });
 
+  // ping - bounded against a client whose PING behaviour the test dictates
+
+  describe('ping', () => {
+    class FakePingClient {
+      public isConnected = false;
+      public readonly sent: Array<{ command: string; args: string[] }> = [];
+
+      public constructor(private readonly onSend: () => Promise<any> = () => Promise.resolve('PONG')) {}
+
+      public async connect(): Promise<void> {
+        this.isConnected = true;
+      }
+
+      public async disconnect(): Promise<void> {
+        this.isConnected = false;
+      }
+
+      public async duplicate(): Promise<RedisClientAdapter> {
+        return this as unknown as RedisClientAdapter;
+      }
+
+      public async send(command: string, args: string[]): Promise<any> {
+        this.sent.push({ command, args });
+
+        return this.onSend();
+      }
+    }
+
+    async function serviceWith(client: FakePingClient): Promise<TestRedisService> {
+      const service = new TestRedisService();
+
+      service.initWithOptions({ config: { url: REDIS_URL }, client: client as unknown as RedisClientAdapter });
+      await service.onStart();
+
+      return service;
+    }
+
+    it("should resolve with 'PONG'", async () => {
+      const client = new FakePingClient(() => Promise.resolve('PONG'));
+      const service = await serviceWith(client);
+
+      expect(await service.ping()).toBe('PONG');
+      expect(client.sent).toEqual([{ command: 'PING', args: [] }]);
+    });
+
+    it('should reject with the timeout message when PING never settles', async () => {
+      const client = new FakePingClient(() => new Promise(() => {}));
+      const service = await serviceWith(client);
+
+      await expect(service.ping(20)).rejects.toThrow('Redis PING timed out after 20ms');
+    });
+
+    it('should return true from testConnection on PONG', async () => {
+      const service = await serviceWith(new FakePingClient());
+
+      expect(await service.testConnection()).toBe(true);
+    });
+
+    it('should return false from testConnection on timeout', async () => {
+      const service = await serviceWith(new FakePingClient(() => new Promise(() => {})));
+
+      expect(await service.testConnection()).toBe(false);
+    });
+
+    it('should return false from testConnection without sending when disconnected', async () => {
+      const client = new FakePingClient();
+      const service = await serviceWith(client);
+
+      client.isConnected = false;
+
+      expect(await service.testConnection()).toBe(false);
+      expect(client.sent).toHaveLength(0);
+    });
+  });
+
   // Raw command & client access
 
   describe('Raw command & client access', () => {

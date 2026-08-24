@@ -63,4 +63,35 @@ describe('@Redis decorator', () => {
 
     expect(options.logger).toBe(customLogger);
   });
+
+  describe('options thunk', () => {
+    it('should evaluate the thunk at construction, not at decoration', () => {
+      let calls = 0;
+
+      @Redis(() => {
+        calls++;
+        return { config: { url: 'redis://localhost:6379' } };
+      })
+      class LazyRedis extends AsenaRedisService {}
+
+      expect(calls).toBe(0);
+
+      const instance = new LazyRedis();
+
+      expect(calls).toBe(1);
+      expect(instance.config.url).toBe('redis://localhost:6379');
+
+      const second = new LazyRedis();
+
+      expect(second).toBeInstanceOf(AsenaRedisService);
+      expect(calls).toBe(2);
+    });
+
+    it('should register under the class name', () => {
+      @Redis(() => ({ config: { url: 'redis://localhost:6379' } }))
+      class ThunkRedis extends AsenaRedisService {}
+
+      expect(ThunkRedis.name).toBe('ThunkRedis');
+    });
+  });
 });
