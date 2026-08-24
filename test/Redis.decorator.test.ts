@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import { ComponentConstants } from '@asenajs/asena/ioc/constants';
+import { getTypedMetadata } from '@asenajs/asena/utils';
 import { Redis } from '../lib/decorators';
 import { AsenaRedisService } from '../lib/AsenaRedisService';
 
@@ -87,11 +89,15 @@ describe('@Redis decorator', () => {
       expect(calls).toBe(2);
     });
 
-    it('should register under the class name', () => {
+    it('should register the thunk form under the class name and the object form under its name', () => {
       @Redis(() => ({ config: { url: 'redis://localhost:6379' } }))
       class ThunkRedis extends AsenaRedisService {}
 
-      expect(ThunkRedis.name).toBe('ThunkRedis');
+      @Redis({ name: 'CustomRedis', config: { url: 'redis://localhost:6379' } })
+      class NamedRedis extends AsenaRedisService {}
+
+      expect(getTypedMetadata<string>(ComponentConstants.NameKey, ThunkRedis)).toBe('ThunkRedis');
+      expect(getTypedMetadata<string>(ComponentConstants.NameKey, NamedRedis)).toBe('CustomRedis');
     });
   });
 });

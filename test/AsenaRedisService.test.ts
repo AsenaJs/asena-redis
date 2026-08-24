@@ -405,6 +405,25 @@ describe('AsenaRedisService', () => {
       await expect(service.ping(20)).rejects.toThrow('Redis PING timed out after 20ms');
     });
 
+    it('should swallow the orphaned PING rejection once the timeout has won', async () => {
+      let rejectPing: (reason: unknown) => void = () => {};
+      const client = new FakePingClient(
+        () =>
+          new Promise((_, reject) => {
+            rejectPing = reject;
+          }),
+      );
+      const service = await serviceWith(client);
+
+      await expect(service.ping(10)).rejects.toThrow('Redis PING timed out after 10ms');
+
+      // A late failure of the abandoned PING must not surface as an unhandled rejection
+      rejectPing(new Error('late failure'));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+
     it('should return true from testConnection on PONG', async () => {
       const service = await serviceWith(new FakePingClient());
 
