@@ -216,6 +216,7 @@ interface RedisConfig {
 
 #### Raw & Lifecycle
 - `send(command, args)` - Execute raw Redis command
+- `ping(timeoutMs?)` - Send PING and resolve with `'PONG'`, or reject after `timeoutMs` (default 1000)
 - `client` - Access underlying `RedisClientAdapter`
 - `createSubscriber()` - Create a duplicate connection for pub/sub
 - `testConnection()` - Returns `true` if connected
