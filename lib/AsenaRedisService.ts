@@ -200,13 +200,43 @@ export abstract class AsenaRedisService {
     }
   }
 
+  /**
+   * Sends PING and resolves with the reply, bounded by a timeout.
+   *
+   * With the offline queue enabled and no connection, a command does not fail - it waits in
+   * the queue for a connection that may never come, so an unbounded PING hangs forever. A
+   * readiness probe must fail fast instead: on timeout this rejects with
+   * `Redis PING timed out after <n>ms`. The timer is cleared in `finally`, so a probe never
+   * leaves a live timer behind.
+   */
+  public async ping(timeoutMs = 1000): Promise<'PONG'> {
+    const pong = this.getClient().send('PING', []);
+
+    // If the timeout wins the race, a late failure of the orphaned PING must not surface
+    // as an unhandled rejection.
+    pong.catch(() => {});
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      return await Promise.race([
+        pong,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`Redis PING timed out after ${timeoutMs}ms`)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   public async testConnection(): Promise<boolean> {
     if (!this._client || !this._client.isConnected) {
       return false;
     }
 
     try {
-      await this._client.send('PING', []);
+      await this.ping();
 
       return true;
     } catch {

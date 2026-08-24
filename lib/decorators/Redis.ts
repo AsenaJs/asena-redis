@@ -1,10 +1,21 @@
 import 'reflect-metadata';
-import type { RedisDecoratorOptions } from '../types';
+import type { RedisDecoratorOptions, RedisOptions } from '../types';
 import type { AsenaRedisService } from '../AsenaRedisService';
 import { Service } from '@asenajs/asena/decorators';
 
-export function Redis(options: RedisDecoratorOptions) {
+/**
+ * Decorates a class extending {@link AsenaRedisService} with Redis options.
+ *
+ * `options` may be a thunk (`() => RedisOptions`) so the configuration is resolved when an
+ * instance is constructed, not when the class is defined - a service in a shared package can
+ * then read environment-dependent values (`process.env.REDIS_URL`, ...) at runtime. A thunk
+ * is registered under the decorated class's own name; use the object form with `name` to
+ * choose the registration key explicitly.
+ */
+export function Redis(options: RedisDecoratorOptions | (() => RedisOptions)) {
   return function <T extends new (...args: any[]) => AsenaRedisService>(target: T) {
+    const serviceName = typeof options === 'function' ? target.name : options.name || target.name;
+
     // Extend the decorated class itself. Extending AsenaRedisService discarded the target's
     // prototype chain, so anything the service inherited from an intermediate base class -
     // methods, getters, statics, instanceof - was silently dropped.
@@ -12,7 +23,7 @@ export function Redis(options: RedisDecoratorOptions) {
     // This needs the IocEngine fix in @asenajs/asena 0.9.0: the wrapper registers under the
     // target's own name, and the engine used to treat that parent name as a dependency and
     // report a circular dependency. Hence the peer bump.
-    @Service(options.name || target.name)
+    @Service(serviceName)
     class RedisServiceClass extends (target as unknown as typeof AsenaRedisService) {
       public constructor() {
         // `target` is a class at runtime; the `as unknown as` cast above hides that from
@@ -20,14 +31,16 @@ export function Redis(options: RedisDecoratorOptions) {
         // eslint-disable-next-line constructor-super
         super();
 
-        if (!options.logger) {
-          options.logger = console;
+        const resolved = typeof options === 'function' ? options() : options;
+
+        if (!resolved.logger) {
+          resolved.logger = console;
         }
 
-        this.setRedisOptions(options);
+        this.setRedisOptions(resolved);
 
-        if (options.client) {
-          this.setRedisClient(options.client);
+        if (resolved.client) {
+          this.setRedisClient(resolved.client);
         }
       }
     }
