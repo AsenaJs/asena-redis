@@ -4,7 +4,7 @@
 
 # @asenajs/asena-redis
 
-[![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](https://github.com/AsenaJs/asena-redis)
+[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](https://github.com/AsenaJs/asena-redis)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Bun Version](https://img.shields.io/badge/Bun-1.4%2B-blueviolet)](https://bun.sh)
 
@@ -24,7 +24,7 @@ Your existing `@Redis` decorated service gives you full Redis operations with au
 ## Requirements
 
 - [Bun](https://bun.sh) v1.4 or higher
-- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.10.1 or higher
+- [@asenajs/asena](https://github.com/AsenaJs/Asena) v0.11.0 or higher
 
 ## Installation
 
@@ -147,7 +147,7 @@ Each server instance gets a unique pod ID. When a message is published through t
 
 `socket.publish()` takes a different route: it excludes the sender, so it does local delivery
 itself with `ws.publish()` and asks the transport only for step 2 onwards via `publishRemote()`.
-Steps 3 and 4 are unchanged. This requires `@asenajs/asena` 0.10.1 or newer.
+Steps 3 and 4 are unchanged. This requires `@asenajs/asena` 0.11.0 or newer.
 
 ### Options
 
