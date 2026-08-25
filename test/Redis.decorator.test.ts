@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import { ComponentConstants } from '@asenajs/asena/ioc/constants';
+import { getTypedMetadata } from '@asenajs/asena/utils';
 import { Redis } from '../lib/decorators';
 import { AsenaRedisService } from '../lib/AsenaRedisService';
 
@@ -62,5 +64,40 @@ describe('@Redis decorator', () => {
     const _ = new LogRedis();
 
     expect(options.logger).toBe(customLogger);
+  });
+
+  describe('options thunk', () => {
+    it('should evaluate the thunk at construction, not at decoration', () => {
+      let calls = 0;
+
+      @Redis(() => {
+        calls++;
+        return { config: { url: 'redis://localhost:6379' } };
+      })
+      class LazyRedis extends AsenaRedisService {}
+
+      expect(calls).toBe(0);
+
+      const instance = new LazyRedis();
+
+      expect(calls).toBe(1);
+      expect(instance.config.url).toBe('redis://localhost:6379');
+
+      const second = new LazyRedis();
+
+      expect(second).toBeInstanceOf(AsenaRedisService);
+      expect(calls).toBe(2);
+    });
+
+    it('should register the thunk form under the class name and the object form under its name', () => {
+      @Redis(() => ({ config: { url: 'redis://localhost:6379' } }))
+      class ThunkRedis extends AsenaRedisService {}
+
+      @Redis({ name: 'CustomRedis', config: { url: 'redis://localhost:6379' } })
+      class NamedRedis extends AsenaRedisService {}
+
+      expect(getTypedMetadata<string>(ComponentConstants.NameKey, ThunkRedis)).toBe('ThunkRedis');
+      expect(getTypedMetadata<string>(ComponentConstants.NameKey, NamedRedis)).toBe('CustomRedis');
+    });
   });
 });

@@ -7,6 +7,25 @@ export { RedisTransport } from './lib/RedisTransport';
 // Microservice transport (Redis Streams)
 export { RedisMicroserviceTransport } from './lib/microservice';
 
+// Redis Streams helpers
+export {
+  xadd,
+  xgroupCreate,
+  xgroupDelConsumer,
+  xreadgroup,
+  xrange,
+  xack,
+  xpending,
+  xpendingConsumer,
+  xinfoConsumers,
+  xclaim,
+  entryTimestamp,
+  normalizeStreamsReply,
+  normalizeEntries,
+  normalizeFields,
+} from './lib/microservice';
+export type { StreamEntry, PendingEntry, ConsumerInfo } from './lib/microservice';
+
 // Adapter
 export type { RedisClientAdapter } from './lib/adapter';
 export { BunRedisAdapter, NodeRedisAdapter, buildRedisUrl } from './lib/adapter';

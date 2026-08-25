@@ -105,6 +105,28 @@ export async function xreadgroup(
 }
 
 /**
+ * XRANGE - reads a range of entries by id. `start`/`end` are Redis range ids
+ * ('-', '+', '<ms>-<seq>', exclusive '(' prefix). Returns entries in id order.
+ */
+export async function xrange(
+  client: RedisClientAdapter,
+  key: string,
+  start = '-',
+  end = '+',
+  count?: number,
+): Promise<StreamEntry[]> {
+  const args = [key, start, end];
+
+  if (count !== undefined) {
+    args.push('COUNT', String(count));
+  }
+
+  const reply = await client.send('XRANGE', args);
+
+  return normalizeEntries(reply);
+}
+
+/**
  * XACK one or more entry ids.
  */
 export async function xack(client: RedisClientAdapter, key: string, group: string, ids: string[]): Promise<void> {
@@ -210,7 +232,7 @@ export function entryTimestamp(id: string): number {
  * RESP2 (node-redis): [[key, [[id, [f, v, ...]], ...]], ...]
  * RESP3 (Bun): Map/object keyed by stream name, values = entry arrays
  */
-function normalizeStreamsReply(reply: any): Map<string, StreamEntry[]> {
+export function normalizeStreamsReply(reply: any): Map<string, StreamEntry[]> {
   const result = new Map<string, StreamEntry[]>();
 
   if (!reply) return result;
@@ -247,7 +269,7 @@ function normalizeStreamsReply(reply: any): Map<string, StreamEntry[]> {
 /**
  * Normalize an entry list ([[id, [f, v, ...]], ...]) into StreamEntry objects.
  */
-function normalizeEntries(entries: any): StreamEntry[] {
+export function normalizeEntries(entries: any): StreamEntry[] {
   const result: StreamEntry[] = [];
 
   for (const entry of toArray(entries)) {
@@ -265,7 +287,7 @@ function normalizeEntries(entries: any): StreamEntry[] {
  * Normalize a field list into a record.
  * RESP2: flat [field, value, field, value] array; RESP3 may already be a map/object.
  */
-function normalizeFields(fields: any): Record<string, string> {
+export function normalizeFields(fields: any): Record<string, string> {
   const result: Record<string, string> = {};
 
   if (fields instanceof Map) {
