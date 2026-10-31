@@ -4,7 +4,7 @@
 
 # @asenajs/asena-redis
 
-[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](https://github.com/AsenaJs/asena-redis)
+[![Version](https://img.shields.io/npm/v/@asenajs/asena-redis.svg)](https://github.com/AsenaJs/asena-redis)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Bun Version](https://img.shields.io/badge/Bun-1.4%2B-blueviolet)](https://bun.sh)
 
