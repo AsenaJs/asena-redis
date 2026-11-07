@@ -13,6 +13,7 @@ import {
   CACHE_EVICT_METADATA_KEY,
   CACHE_PUT_METADATA_KEY,
   REDIS_CACHE_OPTIONS_KEY,
+  type CacheCommonOptions,
   type CacheConfigOptions,
   type CacheEvictOptions,
   type CacheableOptions,
@@ -21,11 +22,14 @@ import {
 } from './CacheOptions';
 import { decodeCacheValue, encodeCacheValue, type DecodeResult } from './cacheCodec';
 import { prefixScanPattern, resolveCacheKey, resolveOption, type CacheKeySource } from './cacheKey';
+import { DEFAULT_CACHE_TIMEOUT_MS, withTimeout } from './commandTimeout';
 import { deleteByPattern } from './scanDelete';
 
 const AUTO_DETECTED = Symbol.for('asena:redis:cache:auto');
 
 const MISS: DecodeResult = { ok: false };
+
+const READ_FAILED = Symbol('read failed');
 
 /** One decorated method, with the class and application levels its options fall back to. */
 interface MethodScope {
@@ -34,14 +38,17 @@ interface MethodScope {
   levels: readonly [CacheConfigOptions, RedisCacheOptions];
 }
 
-interface WritePlan extends CacheKeySource {
+interface CommandPlan extends CacheKeySource {
   redis?: string;
+  timeout: number;
+}
+
+interface WritePlan extends CommandPlan {
   ttl?: number;
   cacheNull: boolean;
 }
 
-interface EvictPlan extends CacheKeySource {
-  redis?: string;
+interface EvictPlan extends CommandPlan {
   allEntries: boolean;
   beforeInvocation: boolean;
 }
@@ -118,17 +125,23 @@ export class CachePostProcessor implements ComponentPostProcessor {
         }
 
         const key = keyFor ? keyFor(args) : undefined;
+        let writable = true;
 
         if (readFor && key !== undefined) {
           const hit = await readFor(key);
 
-          if (hit.ok) return hit.value;
+          if (hit === READ_FAILED) {
+            // Redis just failed the read; a write would most likely wait out the limit a second time.
+            writable = false;
+          } else if (hit.ok) {
+            return hit.value;
+          }
         }
 
         // Not caught: the method's own error must reach the caller, skipping write and eviction.
         const result = await invoke.apply(this, args);
 
-        if (writeFor && key !== undefined) {
+        if (writeFor && key !== undefined && writable) {
           await writeFor(key, result);
         }
 
@@ -182,6 +195,7 @@ export class CachePostProcessor implements ComponentPostProcessor {
       methodName,
       redis: resolveOption('redis', levels),
       prefix: resolveOption('prefix', levels),
+      timeout: this.resolveTimeout(levels, scope),
       ttl,
       key: options.key,
       cacheNull: options.cacheNull ?? true,
@@ -209,18 +223,32 @@ export class CachePostProcessor implements ComponentPostProcessor {
       methodName,
       redis: resolveOption('redis', levels),
       prefix,
+      timeout: this.resolveTimeout(levels, scope),
       key: options.key,
       allEntries,
       beforeInvocation: options.beforeInvocation === true,
     };
   }
 
-  private async readCache(plan: WritePlan, key: string): Promise<DecodeResult> {
+  private resolveTimeout(levels: ReadonlyArray<CacheCommonOptions | undefined>, scope: MethodScope): number {
+    const timeout = resolveOption('timeout', levels) ?? DEFAULT_CACHE_TIMEOUT_MS;
+
+    if (typeof timeout !== 'number' || !Number.isFinite(timeout) || timeout <= 0) {
+      throw new Error(
+        `The cache decorator on ${scope.className}.${scope.methodName} resolved timeout=${String(timeout)}. ` +
+          `It must be a positive number of milliseconds, or omitted for the ${DEFAULT_CACHE_TIMEOUT_MS} ms default.`,
+      );
+    }
+
+    return timeout;
+  }
+
+  private async readCache(plan: WritePlan, key: string): Promise<DecodeResult | typeof READ_FAILED> {
     // Outside the try: a misconfigured graph must propagate, a failed Redis command must not.
     const service = this.resolveService(plan.redis);
 
     try {
-      const raw = await service.get(key);
+      const raw = await withTimeout(service.get(key), plan.timeout, 'GET');
 
       if (raw === null) return MISS;
 
@@ -234,7 +262,7 @@ export class CachePostProcessor implements ComponentPostProcessor {
     } catch (error) {
       this.warn(`cache read for '${key}' failed, running the method instead: ${this.reason(error)}`);
 
-      return MISS;
+      return READ_FAILED;
     }
   }
 
@@ -260,7 +288,7 @@ export class CachePostProcessor implements ComponentPostProcessor {
       // One command: a crash between SET and EXPIRE would store an entry that never expires.
       const args = plan.ttl === undefined ? [key, payload] : [key, payload, 'EX', String(plan.ttl)];
 
-      await service.send('SET', args);
+      await withTimeout(service.send('SET', args), plan.timeout, 'SET');
     } catch (error) {
       this.warn(`cache write for '${key}' failed: ${this.reason(error)}`);
     }
@@ -271,15 +299,19 @@ export class CachePostProcessor implements ComponentPostProcessor {
 
     // Outside the try: a throwing `key` function is a bug, and swallowing it hides a lost eviction.
     const key = plan.allEntries ? null : resolveCacheKey(plan, args);
+    const target = key ?? prefixScanPattern(plan.prefix!);
 
     try {
       if (key === null) {
-        await deleteByPattern(service, prefixScanPattern(plan.prefix!), (message) => this.warn(message));
+        const send = (command: string, commandArgs: string[]) =>
+          withTimeout(service.send(command, commandArgs), plan.timeout, command);
+
+        await deleteByPattern(send, target, (message) => this.warn(message));
       } else {
-        await service.del(key);
+        await withTimeout(service.del(key), plan.timeout, 'DEL');
       }
     } catch (error) {
-      this.warn(`cache eviction for ${plan.className}.${plan.methodName} failed: ${this.reason(error)}`);
+      this.warn(`cache eviction of '${target}' for ${plan.className}.${plan.methodName} failed: ${this.reason(error)}`);
     }
   }
 

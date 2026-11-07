@@ -1,4 +1,5 @@
-import type { AsenaRedisService } from '../AsenaRedisService';
+/** Sends one raw command; the caller decides how long each one may take. */
+export type SendCommand = (command: string, args: string[]) => Promise<unknown>;
 
 const SCAN_COUNT = 500;
 
@@ -30,7 +31,7 @@ const parseScanReply = (reply: unknown): ScanReply | null => {
  * @returns How many keys were handed to DEL.
  */
 export const deleteByPattern = async (
-  service: AsenaRedisService,
+  send: SendCommand,
   pattern: string,
   onUnexpectedReply: (message: string) => void,
 ): Promise<number> => {
@@ -44,7 +45,7 @@ export const deleteByPattern = async (
       break;
     }
 
-    const reply = parseScanReply(await service.send('SCAN', [cursor, 'MATCH', pattern, 'COUNT', String(SCAN_COUNT)]));
+    const reply = parseScanReply(await send('SCAN', [cursor, 'MATCH', pattern, 'COUNT', String(SCAN_COUNT)]));
 
     if (!reply) {
       onUnexpectedReply(`SCAN over '${pattern}' returned an unrecognized reply; giving up`);
@@ -55,7 +56,7 @@ export const deleteByPattern = async (
 
     // `DEL` with no arguments is a syntax error, and an empty SCAN round is normal.
     if (reply.keys.length > 0) {
-      await service.send('DEL', reply.keys);
+      await send('DEL', reply.keys);
       deleted += reply.keys.length;
     }
   } while (cursor !== '0');

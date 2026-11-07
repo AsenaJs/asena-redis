@@ -13,6 +13,12 @@ export interface CacheCommonOptions {
 
   /** Time to live in SECONDS. Omitted means the entry never expires. */
   ttl?: number;
+
+  /**
+   * Limit in MILLISECONDS on each Redis command the cache sends (GET, SET, DEL, each SCAN round
+   * and delete batch). A command past it counts as failed, so the call fails open. Default 500.
+   */
+  timeout?: number;
 }
 
 export interface CacheableOptions extends CacheCommonOptions {
