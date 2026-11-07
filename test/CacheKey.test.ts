@@ -3,25 +3,25 @@ import { defaultCacheKey, joinPrefix, resolveCacheKey, resolveOption } from '../
 
 describe('resolveOption', () => {
   it('prefers the method option over the class and app levels', () => {
-    expect(resolveOption('ttl', { ttl: 10 }, { ttl: 20 }, { ttl: 30 })).toBe(10);
-    expect(resolveOption('ttl', {}, { ttl: 20 }, { ttl: 30 })).toBe(20);
-    expect(resolveOption('ttl', {}, {}, { ttl: 30 })).toBe(30);
-    expect(resolveOption('ttl', {}, {}, {})).toBeUndefined();
+    expect(resolveOption('ttl', [{ ttl: 10 }, { ttl: 20 }, { ttl: 30 }])).toBe(10);
+    expect(resolveOption('ttl', [{}, { ttl: 20 }, { ttl: 30 }])).toBe(20);
+    expect(resolveOption('ttl', [{}, {}, { ttl: 30 }])).toBe(30);
+    expect(resolveOption('ttl', [{}, {}, {}])).toBeUndefined();
   });
 
   it('does not let an explicit undefined at a nearer level clobber a farther one', () => {
     // A spread would turn a shared 300s TTL into "never expires" for one method, silently.
-    expect(resolveOption('ttl', { ttl: undefined }, { ttl: 20 }, undefined)).toBe(20);
-    expect(resolveOption('prefix', { prefix: undefined }, undefined, { prefix: 'app' })).toBe('app');
+    expect(resolveOption('ttl', [{ ttl: undefined }, { ttl: 20 }, undefined])).toBe(20);
+    expect(resolveOption('prefix', [{ prefix: undefined }, undefined, { prefix: 'app' }])).toBe('app');
   });
 
   it('resolves each field independently', () => {
     const method = { ttl: 5 };
     const classLevel = { prefix: 'user', redis: 'AppRedis' };
 
-    expect(resolveOption('ttl', method, classLevel, undefined)).toBe(5);
-    expect(resolveOption('prefix', method, classLevel, undefined)).toBe('user');
-    expect(resolveOption('redis', method, classLevel, undefined)).toBe('AppRedis');
+    expect(resolveOption('ttl', [method, classLevel, undefined])).toBe(5);
+    expect(resolveOption('prefix', [method, classLevel, undefined])).toBe('user');
+    expect(resolveOption('redis', [method, classLevel, undefined])).toBe('AppRedis');
   });
 });
 
@@ -74,18 +74,21 @@ describe('defaultCacheKey', () => {
 });
 
 describe('resolveCacheKey', () => {
+  const findById = { className: 'UserService', methodName: 'findById' };
+
   it('uses the generator and applies the prefix', () => {
-    expect(resolveCacheKey((id: string) => id, 'user', 'UserService', 'findById', ['42'])).toBe('user:42');
+    expect(resolveCacheKey({ ...findById, key: (id: string) => id, prefix: 'user' }, ['42'])).toBe('user:42');
   });
 
   it('falls back to the derived key when no generator is given', () => {
-    expect(resolveCacheKey(undefined, 'user', 'UserService', 'findById', ['42'])).toBe(
-      'user:UserService.findById:["42"]',
-    );
+    expect(resolveCacheKey({ ...findById, prefix: 'user' }, ['42'])).toBe('user:UserService.findById:["42"]');
   });
 
   it('passes every argument to the generator', () => {
-    const key = resolveCacheKey((a: string, b: number) => `${a}-${b}`, undefined, 'S', 'm', ['x', 7]);
+    const key = resolveCacheKey({ className: 'S', methodName: 'm', key: (a: string, b: number) => `${a}-${b}` }, [
+      'x',
+      7,
+    ]);
 
     expect(key).toBe('x-7');
   });
@@ -95,19 +98,17 @@ describe('resolveCacheKey', () => {
       throw new Error('key exploded');
     };
 
-    expect(() => resolveCacheKey(boom, undefined, 'S', 'm', [])).toThrow('key exploded');
+    expect(() => resolveCacheKey({ className: 'S', methodName: 'm', key: boom }, [])).toThrow('key exploded');
   });
 
   it('rejects a generator that returns an empty string', () => {
     // An empty key is a real Redis key, and every method with a broken generator would share it.
-    expect(() => resolveCacheKey(() => '', undefined, 'UserService', 'findById', [])).toThrow(
+    expect(() => resolveCacheKey({ ...findById, key: () => '' }, [])).toThrow(
       /UserService\.findById.*non-empty string/s,
     );
   });
 
   it('rejects a generator that returns a non-string', () => {
-    expect(() => resolveCacheKey((() => 42) as never, undefined, 'UserService', 'findById', [])).toThrow(
-      /non-empty string/,
-    );
+    expect(() => resolveCacheKey({ ...findById, key: (() => 42) as never }, [])).toThrow(/non-empty string/);
   });
 });

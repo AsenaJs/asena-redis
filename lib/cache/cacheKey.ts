@@ -1,12 +1,20 @@
 import type { CacheCommonOptions, CacheKeyGenerator } from './CacheOptions';
 
+/** What a cache key is built from, besides the call's arguments. */
+export interface CacheKeySource {
+  key?: CacheKeyGenerator;
+  prefix?: string;
+  className: string;
+  methodName: string;
+}
+
+/** @param levels Nearest first: method, `@CacheConfig`, `@RedisCache`. */
 // `??` rather than a spread: an explicit `ttl: undefined` must not clobber the class-level value.
 export const resolveOption = <K extends keyof CacheCommonOptions>(
   field: K,
-  method: CacheCommonOptions | undefined,
-  classLevel: CacheCommonOptions | undefined,
-  app: CacheCommonOptions | undefined,
-): CacheCommonOptions[K] => method?.[field] ?? classLevel?.[field] ?? app?.[field];
+  levels: ReadonlyArray<CacheCommonOptions | undefined>,
+): CacheCommonOptions[K] =>
+  levels.reduceRight<CacheCommonOptions[K]>((farther, level) => level?.[field] ?? farther, undefined);
 
 export const joinPrefix = (prefix: string | undefined, key: string): string => {
   if (!prefix) return key;
@@ -41,13 +49,8 @@ export const defaultCacheKey = (className: string, methodName: string, args: unk
 };
 
 /** @throws When the generator returns anything but a non-empty string, or itself throws. */
-export const resolveCacheKey = (
-  generator: CacheKeyGenerator | undefined,
-  prefix: string | undefined,
-  className: string,
-  methodName: string,
-  args: unknown[],
-): string => {
+export const resolveCacheKey = (source: CacheKeySource, args: unknown[]): string => {
+  const { key: generator, prefix, className, methodName } = source;
   const raw = generator ? generator(...args) : defaultCacheKey(className, methodName, args);
 
   if (typeof raw !== 'string' || raw.length === 0) {

@@ -15,31 +15,33 @@ import {
   REDIS_CACHE_OPTIONS_KEY,
   type CacheConfigOptions,
   type CacheEvictOptions,
-  type CacheKeyGenerator,
   type CacheableOptions,
   type CachePutOptions,
   type RedisCacheOptions,
 } from './CacheOptions';
 import { decodeCacheValue, encodeCacheValue, type DecodeResult } from './cacheCodec';
-import { prefixScanPattern, resolveCacheKey, resolveOption } from './cacheKey';
+import { prefixScanPattern, resolveCacheKey, resolveOption, type CacheKeySource } from './cacheKey';
 import { deleteByPattern } from './scanDelete';
 
 const AUTO_DETECTED = Symbol.for('asena:redis:cache:auto');
 
 const MISS: DecodeResult = { ok: false };
 
-interface WritePlan {
+/** One decorated method, with the class and application levels its options fall back to. */
+interface MethodScope {
+  className: string;
+  methodName: string;
+  levels: readonly [CacheConfigOptions, RedisCacheOptions];
+}
+
+interface WritePlan extends CacheKeySource {
   redis?: string;
-  prefix?: string;
   ttl?: number;
-  key?: CacheKeyGenerator;
   cacheNull: boolean;
 }
 
-interface EvictPlan {
+interface EvictPlan extends CacheKeySource {
   redis?: string;
-  prefix?: string;
-  key?: CacheKeyGenerator;
   allEntries: boolean;
   beforeInvocation: boolean;
 }
@@ -68,8 +70,10 @@ export class CachePostProcessor implements ComponentPostProcessor {
       return instance;
     }
 
-    const classConfig = getChainedTypedMetadata<CacheConfigOptions>(CACHE_CONFIG_KEY, Class);
-    const appConfig = getChainedTypedMetadata<RedisCacheOptions>(REDIS_CACHE_OPTIONS_KEY, this.constructor);
+    const levels = [
+      getChainedTypedMetadata<CacheConfigOptions>(CACHE_CONFIG_KEY, Class),
+      getChainedTypedMetadata<RedisCacheOptions>(REDIS_CACHE_OPTIONS_KEY, this.constructor),
+    ] as const;
     const className = Class.name;
 
     for (const methodName of new Set([...cacheables.keys(), ...puts.keys(), ...evicts.keys()])) {
@@ -94,17 +98,14 @@ export class CachePostProcessor implements ComponentPostProcessor {
         );
       }
 
-      const writePlan = this.buildWritePlan(cacheable ?? put, classConfig, appConfig, className, methodName);
-      const evictPlan = this.buildEvictPlan(evict, classConfig, appConfig, className, methodName);
+      const scope: MethodScope = { className, methodName, levels };
+      const writePlan = this.buildWritePlan(cacheable ?? put, scope);
+      const evictPlan = this.buildEvictPlan(evict, scope);
 
       const readFor = cacheable && writePlan ? (key: string) => this.readCache(writePlan, key) : null;
-      const writeFor = writePlan
-        ? (key: string, value: unknown) => this.writeCache(writePlan, key, value, className, methodName)
-        : null;
-      const keyFor = writePlan
-        ? (args: unknown[]) => resolveCacheKey(writePlan.key, writePlan.prefix, className, methodName, args)
-        : null;
-      const evictFor = evictPlan ? (args: unknown[]) => this.runEvict(evictPlan, className, methodName, args) : null;
+      const writeFor = writePlan ? (key: string, value: unknown) => this.writeCache(writePlan, key, value) : null;
+      const keyFor = writePlan ? (args: unknown[]) => resolveCacheKey(writePlan, args) : null;
+      const evictFor = evictPlan ? (args: unknown[]) => this.runEvict(evictPlan, args) : null;
       const evictBefore = evictPlan?.beforeInvocation === true;
 
       const invoke = original as (...args: unknown[]) => unknown;
@@ -161,14 +162,13 @@ export class CachePostProcessor implements ComponentPostProcessor {
 
   private buildWritePlan(
     options: CacheableOptions | CachePutOptions | undefined,
-    classConfig: CacheConfigOptions,
-    appConfig: RedisCacheOptions,
-    className: string,
-    methodName: string,
+    scope: MethodScope,
   ): WritePlan | null {
     if (!options) return null;
 
-    const ttl = resolveOption('ttl', options, classConfig, appConfig);
+    const { className, methodName } = scope;
+    const levels = [options, ...scope.levels];
+    const ttl = resolveOption('ttl', levels);
 
     if (ttl !== undefined && (!Number.isInteger(ttl) || ttl <= 0)) {
       throw new Error(
@@ -178,24 +178,22 @@ export class CachePostProcessor implements ComponentPostProcessor {
     }
 
     return {
-      redis: resolveOption('redis', options, classConfig, appConfig),
-      prefix: resolveOption('prefix', options, classConfig, appConfig),
+      className,
+      methodName,
+      redis: resolveOption('redis', levels),
+      prefix: resolveOption('prefix', levels),
       ttl,
       key: options.key,
       cacheNull: options.cacheNull ?? true,
     };
   }
 
-  private buildEvictPlan(
-    options: CacheEvictOptions | undefined,
-    classConfig: CacheConfigOptions,
-    appConfig: RedisCacheOptions,
-    className: string,
-    methodName: string,
-  ): EvictPlan | null {
+  private buildEvictPlan(options: CacheEvictOptions | undefined, scope: MethodScope): EvictPlan | null {
     if (!options) return null;
 
-    const prefix = resolveOption('prefix', options, classConfig, appConfig);
+    const { className, methodName } = scope;
+    const levels = [options, ...scope.levels];
+    const prefix = resolveOption('prefix', levels);
     const allEntries = options.allEntries === true;
 
     if (allEntries && !prefix) {
@@ -207,7 +205,9 @@ export class CachePostProcessor implements ComponentPostProcessor {
     }
 
     return {
-      redis: resolveOption('redis', options, classConfig, appConfig),
+      className,
+      methodName,
+      redis: resolveOption('redis', levels),
       prefix,
       key: options.key,
       allEntries,
@@ -238,13 +238,7 @@ export class CachePostProcessor implements ComponentPostProcessor {
     }
   }
 
-  private async writeCache(
-    plan: WritePlan,
-    key: string,
-    value: unknown,
-    className: string,
-    methodName: string,
-  ): Promise<void> {
+  private async writeCache(plan: WritePlan, key: string, value: unknown): Promise<void> {
     if ((value === null || value === undefined) && !plan.cacheNull) {
       return;
     }
@@ -253,7 +247,7 @@ export class CachePostProcessor implements ComponentPostProcessor {
 
     if (payload === null) {
       this.warn(
-        `${className}.${methodName} returned a value that cannot be JSON-serialized; skipping the ` +
+        `${plan.className}.${plan.methodName} returned a value that cannot be JSON-serialized; skipping the ` +
           `cache write for '${key}'`,
       );
 
@@ -272,11 +266,11 @@ export class CachePostProcessor implements ComponentPostProcessor {
     }
   }
 
-  private async runEvict(plan: EvictPlan, className: string, methodName: string, args: unknown[]): Promise<void> {
+  private async runEvict(plan: EvictPlan, args: unknown[]): Promise<void> {
     const service = this.resolveService(plan.redis);
 
     // Outside the try: a throwing `key` function is a bug, and swallowing it hides a lost eviction.
-    const key = plan.allEntries ? null : resolveCacheKey(plan.key, plan.prefix, className, methodName, args);
+    const key = plan.allEntries ? null : resolveCacheKey(plan, args);
 
     try {
       if (key === null) {
@@ -285,7 +279,7 @@ export class CachePostProcessor implements ComponentPostProcessor {
         await service.del(key);
       }
     } catch (error) {
-      this.warn(`cache eviction for ${className}.${methodName} failed: ${this.reason(error)}`);
+      this.warn(`cache eviction for ${plan.className}.${plan.methodName} failed: ${this.reason(error)}`);
     }
   }
 
