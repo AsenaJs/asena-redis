@@ -67,4 +67,10 @@ describe('cache codec', () => {
     expect(decodeCacheValue('null')).toEqual({ ok: false });
     expect(decodeCacheValue('[1,2]')).toEqual({ ok: false });
   });
+
+  it('treats a foreign object as a miss, not as a hit carrying undefined', () => {
+    // A key collision with some other writer's JSON would otherwise answer callers with undefined.
+    expect(decodeCacheValue('{"name":"x"}')).toEqual({ ok: false });
+    expect(decodeCacheValue('{"v":1,"name":"x"}')).toEqual({ ok: false });
+  });
 });

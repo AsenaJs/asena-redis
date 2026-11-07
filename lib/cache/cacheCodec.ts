@@ -30,5 +30,9 @@ export const decodeCacheValue = (raw: string): DecodeResult => {
   }
 
   // `{}` is the stored form of `undefined`: an absent 'v' is a hit carrying undefined.
+  if (Object.keys(parsed).some((field) => field !== 'v')) {
+    return { ok: false };
+  }
+
   return { ok: true, value: (parsed as CacheEnvelope).v };
 };
