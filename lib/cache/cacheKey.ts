@@ -16,6 +16,9 @@ export const joinPrefix = (prefix: string | undefined, key: string): string => {
   return `${trimmed}:${key}`;
 };
 
+/** The SCAN pattern for every key under `prefix`, with the prefix's glob characters literal. */
+export const prefixScanPattern = (prefix: string): string => joinPrefix(prefix.replace(/[\\*?[\]]/g, '\\$&'), '*');
+
 /**
  * @throws When an argument cannot be serialized: a key derived from a value we cannot read is a
  *   key that collides, and a colliding cache returns one caller's data to another.

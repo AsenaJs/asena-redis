@@ -155,6 +155,29 @@ for (const adapter of ['bun', 'node-redis'] as const) {
       expect(await redis.keys(`${prefix}*`)).toHaveLength(0);
     });
 
+    it('allEntries treats glob characters in the prefix literally', async () => {
+      // Unescaped, `[v2]` matches `v:` and `2:` but never its own keys, and `*` reaches neighbours.
+      const literal = `${prefix}:[v2]*`;
+      const neighbour = `${prefix}:v:1`;
+
+      await redis.set(`${literal}:1`, '{"v":1}');
+      await redis.set(neighbour, '{"v":2}');
+
+      class UserService {
+        @CacheEvict({ prefix: literal, allEntries: true })
+        public async purge() {
+          return undefined;
+        }
+      }
+
+      const service = await wrap(new UserService(), redis);
+
+      await service.purge();
+
+      expect(await redis.exists(`${literal}:1`)).toBe(false);
+      expect(await redis.exists(neighbour)).toBe(true);
+    });
+
     it('evicts a single key after the method succeeds', async () => {
       await redis.set(`${prefix}:solo`, '{"v":1}');
 

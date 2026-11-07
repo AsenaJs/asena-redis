@@ -21,7 +21,7 @@ import {
   type RedisCacheOptions,
 } from './CacheOptions';
 import { decodeCacheValue, encodeCacheValue, type DecodeResult } from './cacheCodec';
-import { joinPrefix, resolveCacheKey, resolveOption } from './cacheKey';
+import { prefixScanPattern, resolveCacheKey, resolveOption } from './cacheKey';
 import { deleteByPattern } from './scanDelete';
 
 const AUTO_DETECTED = Symbol.for('asena:redis:cache:auto');
@@ -280,7 +280,7 @@ export class CachePostProcessor implements ComponentPostProcessor {
 
     try {
       if (key === null) {
-        await deleteByPattern(service, joinPrefix(plan.prefix, '*'), (message) => this.warn(message));
+        await deleteByPattern(service, prefixScanPattern(plan.prefix!), (message) => this.warn(message));
       } else {
         await service.del(key);
       }

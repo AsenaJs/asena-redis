@@ -2,7 +2,7 @@ export { CachePostProcessor } from './CachePostProcessor';
 export { deleteByPattern } from './scanDelete';
 export { encodeCacheValue, decodeCacheValue } from './cacheCodec';
 export type { DecodeResult } from './cacheCodec';
-export { resolveCacheKey, resolveOption, joinPrefix, defaultCacheKey } from './cacheKey';
+export { resolveCacheKey, resolveOption, joinPrefix, prefixScanPattern, defaultCacheKey } from './cacheKey';
 export {
   CACHEABLE_METADATA_KEY,
   CACHE_PUT_METADATA_KEY,
