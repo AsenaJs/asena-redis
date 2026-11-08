@@ -126,6 +126,45 @@ describe('cache through a real application boot', () => {
     expect(lines.some((line) => line.includes('[RedisCache]'))).toBe(true);
   }, 20000);
 
+  it('stores an entry with the largest ttl the bootstrap accepts', async () => {
+    const prefix = `asena:test:cache-max-ttl:${crypto.randomUUID().slice(0, 8)}`;
+    const warnings: string[] = [];
+
+    @Redis({ config: { url: REDIS_URL, name: 'MaxTtlRedis' }, logger: quietLogger })
+    class MaxTtlRedis extends AsenaRedisService {}
+
+    @RedisCache({ ttl: Number.MAX_SAFE_INTEGER })
+    class AppCache extends CachePostProcessor {}
+
+    @Service()
+    class MaxTtlService {
+      @Cacheable({ prefix, key: () => 'k' })
+      public async find() {
+        return 'live';
+      }
+    }
+
+    server = await AsenaServerFactory.create({
+      headless: true,
+      logger: { ...quietLogger, warn: (message: string) => warnings.push(message) },
+      components: [MaxTtlRedis, AppCache, MaxTtlService],
+      keepAlive: false,
+    });
+
+    await server.start();
+
+    const service = (await server.coreContainer.container.resolve('MaxTtlService')) as MaxTtlService;
+    const redis = (await server.coreContainer.container.resolve('MaxTtlRedis')) as MaxTtlRedis;
+
+    try {
+      expect(await service.find()).toBe('live');
+      expect(warnings.filter((message) => message.includes('cache write'))).toEqual([]);
+      expect(await redis.ttl(`${prefix}:k`)).toBe(Number.MAX_SAFE_INTEGER);
+    } finally {
+      for (const key of await redis.keys(`${prefix}*`)) await redis.del(key);
+    }
+  }, 20000);
+
   it('leaves a component with no cache metadata untouched', async () => {
     @Redis({ config: { url: REDIS_URL, name: 'PlainRedis' }, logger: quietLogger })
     class PlainRedis extends AsenaRedisService {}

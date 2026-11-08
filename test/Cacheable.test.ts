@@ -451,6 +451,25 @@ describe('cache decorators', () => {
       await expect(wrap(new UserService(), container)).rejects.toThrow(/positive whole number of seconds/);
     });
 
+    for (const ttl of [Number.MAX_SAFE_INTEGER + 1, 1e16, 1e21]) {
+      it(`rejects ttl=${String(ttl)}, above the largest whole number a number holds exactly`, async () => {
+        // Redis answers `SET ... EX` with an error from about 9.2e15 s, so every write would fail.
+        @RedisCache({ ttl })
+        class AppCache extends CachePostProcessor {}
+
+        class UserService {
+          @Cacheable({ key: () => 'k' })
+          public async find() {
+            return 1;
+          }
+        }
+
+        await expect(wrap(new UserService(), container, AppCache)).rejects.toThrow(
+          /resolved ttl=.*at most 9007199254740991/,
+        );
+      });
+    }
+
     for (const timeout of [
       0,
       -1,

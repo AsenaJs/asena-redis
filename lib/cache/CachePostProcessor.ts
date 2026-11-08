@@ -182,10 +182,10 @@ export class CachePostProcessor implements ComponentPostProcessor {
     const levels = [options, ...scope.levels];
     const ttl = resolveOption('ttl', levels);
 
-    if (ttl !== undefined && (!Number.isInteger(ttl) || ttl <= 0)) {
+    if (ttl !== undefined && (!Number.isSafeInteger(ttl) || ttl <= 0)) {
       throw new Error(
         `The cache decorator on ${className}.${methodName} resolved ttl=${String(ttl)}. ` +
-          `It must be a positive whole number of seconds, or omitted for no expiry.`,
+          `It must be a positive whole number of seconds, at most ${Number.MAX_SAFE_INTEGER}, or omitted for no expiry.`,
       );
     }
 

@@ -39,9 +39,10 @@ batch of an `allEntries` eviction. A command past the limit counts as failed, so
 open even when the client queues commands while Redis is down.
 
 **Configuration mistakes fail at bootstrap:** a decorator on something that is not a function,
-`@Cacheable` together with `@CachePut`, a `ttl` that is not a positive whole number of seconds,
-a `timeout` that is not a positive number of milliseconds up to `2147483647` (the largest delay a
-timer holds), and `allEntries` without a prefix.
+`@Cacheable` together with `@CachePut`, a `ttl` that is not a positive whole number of seconds
+up to `Number.MAX_SAFE_INTEGER` (Redis refuses an `EX` not far above it), a `timeout` that is
+not a positive number of milliseconds up to `2147483647` (the largest delay a timer holds), and
+`allEntries` without a prefix.
 
 **Wiring mistakes surface on the first call, not at boot**, because a post-processor sees the
 component graph while it is still being built:
