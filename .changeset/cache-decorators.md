@@ -40,7 +40,7 @@ open even when the client queues commands while Redis is down.
 
 **Configuration mistakes fail at bootstrap:** a decorator on something that is not a function,
 `@Cacheable` together with `@CachePut`, a `ttl` that is not a positive whole number of seconds
-up to `Number.MAX_SAFE_INTEGER` (Redis refuses an `EX` not far above it), a `timeout` that is
+up to `Number.MAX_SAFE_INTEGER` (Redis refuses an `EX` from about `9.22e15`), a `timeout` that is
 not a positive number of milliseconds up to `2147483647` (the largest delay a timer holds), and
 `allEntries` without a prefix.
 

@@ -453,7 +453,7 @@ describe('cache decorators', () => {
 
     for (const ttl of [Number.MAX_SAFE_INTEGER + 1, 1e16, 1e21]) {
       it(`rejects ttl=${String(ttl)}, above the largest whole number a number holds exactly`, async () => {
-        // Redis answers `SET ... EX` with an error from about 9.2e15 s, so every write would fail.
+        // Redis's own EX limit (~9.22e15 s, minus the clock) moves with time; above 2^53 literals round.
         @RedisCache({ ttl })
         class AppCache extends CachePostProcessor {}
 

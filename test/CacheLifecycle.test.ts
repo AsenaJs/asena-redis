@@ -6,10 +6,17 @@ import { CachePostProcessor } from '../lib/cache/CachePostProcessor';
 import { Cacheable, CacheEvict } from '../lib/decorators/CacheDecorators';
 import { CacheConfig } from '../lib/decorators/CacheConfig';
 import { Redis, RedisCache } from '../lib/decorators';
+import type { RedisOptions } from '../lib/types';
 
 const REDIS_URL = 'redis://localhost:6379';
 
 const quietLogger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, profile: () => {} } as any;
+
+class StandaloneRedis extends AsenaRedisService {
+  public initWithOptions(options: RedisOptions): void {
+    this.setRedisOptions(options);
+  }
+}
 
 // A real boot is the only proof of the ordering the design rests on: methods are wrapped before
 // the Redis service's own @OnStart has connected, so the client must be resolved on first call.
@@ -163,6 +170,48 @@ describe('cache through a real application boot', () => {
     } finally {
       for (const key of await redis.keys(`${prefix}*`)) await redis.del(key);
     }
+  }, 20000);
+
+  it('fails the boot for a ttl that Redis refuses on SET ... EX', async () => {
+    const prefix = `asena:test:cache-refused-ttl:${crypto.randomUUID().slice(0, 8)}`;
+    const raw = new StandaloneRedis();
+
+    raw.initWithOptions({ config: { url: REDIS_URL, name: 'RawTtlRedis' }, logger: quietLogger });
+    await raw.onStart();
+
+    try {
+      await expect(raw.send('SET', [`${prefix}:k`, 'v', 'EX', String(1e16)])).rejects.toThrow(/invalid expire time/);
+    } finally {
+      for (const key of await raw.keys(`${prefix}*`)) await raw.del(key);
+
+      await raw.disconnect();
+    }
+
+    @Redis({ config: { url: REDIS_URL, name: 'RefusedTtlRedis' }, logger: quietLogger })
+    class RefusedTtlRedis extends AsenaRedisService {}
+
+    @RedisCache({ ttl: 1e16 })
+    class AppCache extends CachePostProcessor {}
+
+    @Service()
+    class RefusedTtlService {
+      @Cacheable({ prefix, key: () => 'k' })
+      public async find() {
+        return 'live';
+      }
+    }
+
+    await expect(
+      (async () => {
+        server = await AsenaServerFactory.create({
+          headless: true,
+          logger: quietLogger,
+          components: [RefusedTtlRedis, AppCache, RefusedTtlService],
+          keepAlive: false,
+        });
+        await server.start();
+      })(),
+    ).rejects.toThrow(/resolved ttl=10000000000000000\./);
   }, 20000);
 
   it('leaves a component with no cache metadata untouched', async () => {
