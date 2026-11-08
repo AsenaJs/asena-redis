@@ -1,6 +1,9 @@
 /** Far above a healthy command on a local Redis (p99 under 0.2 ms) and below a stall a user notices. */
 export const DEFAULT_CACHE_TIMEOUT_MS = 500;
 
+/** The largest delay `setTimeout` honours; above it the timer fires after about 1 ms. */
+export const MAX_CACHE_TIMEOUT_MS = 2_147_483_647;
+
 /**
  * Settles like `command`, or rejects with `<name> timed out after <ms>ms`.
  *

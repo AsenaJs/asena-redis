@@ -451,7 +451,15 @@ describe('cache decorators', () => {
       await expect(wrap(new UserService(), container)).rejects.toThrow(/positive whole number of seconds/);
     });
 
-    for (const timeout of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '100' as unknown as number]) {
+    for (const timeout of [
+      0,
+      -1,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      '100' as unknown as number,
+      2_147_483_648,
+      3e9,
+    ]) {
       it(`rejects timeout=${String(timeout)} on a read and on an eviction`, async () => {
         class ReadService {
           @Cacheable({ key: () => 'k', timeout })
@@ -488,6 +496,37 @@ describe('cache decorators', () => {
       }
 
       await expect(wrap(new UserService(), container, AppCache)).rejects.toThrow(/resolved timeout=-5/);
+    });
+
+    it('names the timer ceiling when a timeout is above it', async () => {
+      // setTimeout turns a delay above 2^31-1 ms into ~1 ms, so every command would time out at once.
+      @RedisCache({ timeout: 3e9 })
+      class AppCache extends CachePostProcessor {}
+
+      class UserService {
+        @Cacheable({ key: () => 'k' })
+        public async find() {
+          return 1;
+        }
+      }
+
+      await expect(wrap(new UserService(), container, AppCache)).rejects.toThrow(
+        /resolved timeout=3000000000\. .*at most 2147483647/,
+      );
+    });
+
+    it('accepts the largest timeout a timer can hold', async () => {
+      class UserService {
+        @Cacheable({ key: () => 'k', timeout: 2_147_483_647 })
+        public async find() {
+          return 1;
+        }
+      }
+
+      const service = await wrap(new UserService(), container);
+
+      expect(await service.find()).toBe(1);
+      expect(client.store.get('k')).toBe('{"v":1}');
     });
 
     it('rejects a decorator on something that is not a method', async () => {

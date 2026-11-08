@@ -22,7 +22,7 @@ import {
 } from './CacheOptions';
 import { decodeCacheValue, encodeCacheValue, type DecodeResult } from './cacheCodec';
 import { prefixScanPattern, resolveCacheKey, resolveOption, type CacheKeySource } from './cacheKey';
-import { DEFAULT_CACHE_TIMEOUT_MS, withTimeout } from './commandTimeout';
+import { DEFAULT_CACHE_TIMEOUT_MS, MAX_CACHE_TIMEOUT_MS, withTimeout } from './commandTimeout';
 import { deleteByPattern } from './scanDelete';
 
 const AUTO_DETECTED = Symbol.for('asena:redis:cache:auto');
@@ -232,10 +232,11 @@ export class CachePostProcessor implements ComponentPostProcessor {
   private resolveTimeout(levels: ReadonlyArray<CacheCommonOptions | undefined>, scope: MethodScope): number {
     const timeout = resolveOption('timeout', levels) ?? DEFAULT_CACHE_TIMEOUT_MS;
 
-    if (typeof timeout !== 'number' || !Number.isFinite(timeout) || timeout <= 0) {
+    if (typeof timeout !== 'number' || !(timeout > 0 && timeout <= MAX_CACHE_TIMEOUT_MS)) {
       throw new Error(
         `The cache decorator on ${scope.className}.${scope.methodName} resolved timeout=${String(timeout)}. ` +
-          `It must be a positive number of milliseconds, or omitted for the ${DEFAULT_CACHE_TIMEOUT_MS} ms default.`,
+          `It must be a positive number of milliseconds, at most ${MAX_CACHE_TIMEOUT_MS}, or omitted for the ` +
+          `${DEFAULT_CACHE_TIMEOUT_MS} ms default.`,
       );
     }
 
