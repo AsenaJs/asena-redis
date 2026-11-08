@@ -99,9 +99,8 @@ export class CachePostProcessor implements ComponentPostProcessor {
 
       if (typeof original !== 'function') {
         throw new Error(
-          `A cache decorator on ${className}.${methodName} could not find a method with that name ` +
-            `on the instance. Use cache decorators on class methods (arrow-function properties are ` +
-            `not supported).`,
+          `A cache decorator on ${className}.${methodName} found ${typeof original} on the instance ` +
+            `instead of a function. Cache decorators go on methods.`,
         );
       }
 

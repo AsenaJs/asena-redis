@@ -498,7 +498,19 @@ describe('cache decorators', () => {
       // Applied by hand: TypeScript would not let a method decorator sit on a string property.
       Cacheable({ key: () => 'k' })(UserService.prototype, 'find', undefined as never);
 
-      await expect(wrap(new UserService(), container)).rejects.toThrow(/could not find a method with that name/);
+      await expect(wrap(new UserService(), container)).rejects.toThrow(
+        'A cache decorator on UserService.find found string on the instance instead of a function.',
+      );
+    });
+
+    it('rejects a decorator on a property that holds no function yet', async () => {
+      class UserService {
+        public find?: () => Promise<number>;
+      }
+
+      Cacheable({ key: () => 'k' })(UserService.prototype, 'find', undefined as never);
+
+      await expect(wrap(new UserService(), container)).rejects.toThrow(/found undefined on the instance/);
     });
   });
 
@@ -1001,6 +1013,89 @@ describe('cache decorators', () => {
     });
   });
 
+  // Each `@ts-expect-error` asserts the decorators stay typed for methods only; the tests show what
+  // happens when one reaches an arrow property anyway (JavaScript, or Bun running without tsc).
+  describe('arrow-function properties', () => {
+    it('wraps and caches an arrow property', async () => {
+      const body = mock(async (id: string) => ({ id }));
+
+      class UserService {
+        // @ts-expect-error TS1240: a method decorator on a property
+        @Cacheable({ prefix: 'user', key: (id: string) => id })
+        public findById = async (id: string) => body(id);
+      }
+
+      const service = await wrap(new UserService(), container);
+
+      expect(await service.findById('42')).toEqual({ id: '42' });
+      expect(await service.findById('42')).toEqual({ id: '42' });
+      expect(body).toHaveBeenCalledTimes(1);
+      expect(client.store.get('user:42')).toBe('{"v":{"id":"42"}}');
+    });
+
+    it('keeps the instance as `this`, also when called detached', async () => {
+      class CounterService {
+        public calls = 0;
+
+        // @ts-expect-error TS1240: a method decorator on a property
+        @Cacheable({ key: (id: string) => id })
+        public find = async (id: string) => {
+          this.calls++;
+
+          return `${id}:${this.calls}`;
+        };
+      }
+
+      const service = await wrap(new CounterService(), container);
+      const detached = service.find;
+
+      expect(await detached('a')).toBe('a:1');
+      expect(await service.find('a')).toBe('a:1');
+      expect(await detached('b')).toBe('b:2');
+      expect(service.calls).toBe(2);
+    });
+
+    it('wraps an arrow property declared on a base class', async () => {
+      class BaseService {
+        public calls = 0;
+
+        // @ts-expect-error TS1240: a method decorator on a property
+        @CacheEvict({ key: () => 'k' })
+        public reset = async () => {
+          this.calls++;
+
+          return 'reset';
+        };
+      }
+
+      class ChildService extends BaseService {}
+
+      client.store.set('k', '{"v":1}');
+
+      const service = await wrap(new ChildService(), container);
+
+      expect(await service.reset()).toBe('reset');
+      expect(service.calls).toBe(1);
+      expect(client.store.has('k')).toBe(false);
+    });
+
+    it('shares entries across instances by key, as a method does', async () => {
+      class UserService {
+        public constructor(private readonly label: string) {}
+
+        // @ts-expect-error TS1240: a method decorator on a property
+        @Cacheable({ key: () => 'shared' })
+        public viaArrow = async () => this.label;
+      }
+
+      const first = await wrap(new UserService('first'), container);
+      const second = await wrap(new UserService('second'), container);
+
+      expect(await first.viaArrow()).toBe('first');
+      expect(await second.viaArrow()).toBe('first');
+    });
+  });
+
   describe('picking the Redis service', () => {
     it('uses the only registered service without being told', async () => {
       class UserService {
@@ -1100,6 +1195,155 @@ describe('cache decorators', () => {
 
       await expect(service.find()).rejects.toThrow(/No component named 'Missing' is registered/);
     });
+  });
+
+  describe('documented limitations', () => {
+    it('returns a Promise even from a synchronous method', async () => {
+      class UserService {
+        @Cacheable({ key: () => 'k' })
+        public find() {
+          return 1;
+        }
+      }
+
+      const service = await wrap(new UserService(), container);
+      const result: unknown = service.find();
+
+      expect(result).toBeInstanceOf(Promise);
+      expect(await result).toBe(1);
+    });
+
+    it('runs the method once per concurrent miss on the same key', async () => {
+      const body = mock(async () => 'live');
+
+      class UserService {
+        @Cacheable({ key: () => 'k' })
+        public async find() {
+          return body();
+        }
+      }
+
+      const service = await wrap(new UserService(), container);
+
+      await Promise.all([service.find(), service.find()]);
+
+      expect(body).toHaveBeenCalledTimes(2);
+    });
+
+    it('lets allEntries clear entries another class wrote under the same prefix', async () => {
+      class Reader {
+        @Cacheable({ prefix: 'shared', key: () => 'k' })
+        public async find() {
+          return 1;
+        }
+      }
+
+      class Purger {
+        @CacheEvict({ prefix: 'shared', allEntries: true })
+        public async purge() {
+          return undefined;
+        }
+      }
+
+      const reader = await wrap(new Reader(), container);
+      const purger = await wrap(new Purger(), container);
+
+      await reader.find();
+      expect(client.store.has('shared:k')).toBe(true);
+
+      await purger.purge();
+      expect(client.store.has('shared:k')).toBe(false);
+    });
+  });
+
+  describe('wiring mistakes surface on the call, not at boot', () => {
+    const notRedis = { get: async () => null, send: async () => 'OK', del: async () => 1 };
+    const containerOf = (services: Record<string, object>) =>
+      ({
+        services: Object.fromEntries(
+          Object.entries(services).map(([name, instance]) => [
+            name,
+            { Class: instance.constructor, instance, singleton: true },
+          ]),
+        ),
+      }) as unknown as Container;
+
+    const mistakes = [
+      {
+        name: 'no Redis service',
+        redis: undefined,
+        services: () => ({}),
+        error: /no AsenaRedisService component is registered/,
+      },
+      {
+        name: 'two Redis services and no name',
+        redis: undefined,
+        services: () => {
+          const second = new StubRedisService();
+
+          second.useClient(new FakeRedisClient());
+
+          return { AppRedis: redis, SessionRedis: second };
+        },
+        error: /2 AsenaRedisService components are registered/,
+      },
+      {
+        name: 'a named service that is missing',
+        redis: 'Missing',
+        services: () => ({ AppRedis: redis }),
+        error: /No component named 'Missing' is registered/,
+      },
+      {
+        name: 'a test double that is not an AsenaRedisService, by name',
+        redis: 'AppRedis',
+        services: () => ({ AppRedis: notRedis }),
+        error: /Component 'AppRedis' is not an AsenaRedisService/,
+      },
+      {
+        name: 'a test double that is not an AsenaRedisService, found automatically',
+        redis: undefined,
+        services: () => ({ AppRedis: notRedis }),
+        error: /no AsenaRedisService component is registered/,
+      },
+    ];
+
+    const decorators = [
+      { name: '@Cacheable', bodyRuns: false, decorate: (r?: string) => Cacheable({ redis: r, key: () => 'k' }) },
+      { name: '@CachePut', bodyRuns: true, decorate: (r?: string) => CachePut({ redis: r, key: () => 'k' }) },
+      { name: '@CacheEvict', bodyRuns: true, decorate: (r?: string) => CacheEvict({ redis: r, key: () => 'k' }) },
+      {
+        name: '@CacheEvict with beforeInvocation',
+        bodyRuns: false,
+        decorate: (r?: string) => CacheEvict({ redis: r, key: () => 'k', beforeInvocation: true }),
+      },
+    ];
+
+    for (const mistake of mistakes) {
+      for (const decorator of decorators) {
+        const when = decorator.bodyRuns ? 'after the method has run' : 'before the method runs';
+
+        it(`${mistake.name}: ${decorator.name} throws ${when}`, async () => {
+          const body = mock(async () => 'ran');
+
+          class Target {
+            public async run() {
+              return body();
+            }
+          }
+
+          decorator.decorate(mistake.redis)(
+            Target.prototype,
+            'run',
+            Object.getOwnPropertyDescriptor(Target.prototype, 'run')!,
+          );
+
+          const service = await wrap(new Target(), containerOf(mistake.services()));
+
+          await expect(service.run()).rejects.toThrow(mistake.error);
+          expect(body).toHaveBeenCalledTimes(decorator.bodyRuns ? 1 : 0);
+        });
+      }
+    }
   });
 
   describe('components without cache metadata', () => {
