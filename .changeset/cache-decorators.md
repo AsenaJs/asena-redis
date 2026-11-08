@@ -74,5 +74,4 @@ service explicitly whenever there is more than one.
   including keys written by other classes sharing it.
 - No stampede protection: concurrent misses on the same key all run the method.
 
-Writes are one atomic `SET key value EX ttl`. `RedisClientAdapter` is unchanged and the
-`@asenajs/asena` peer range is unchanged.
+Writes are one atomic `SET key value EX ttl`. `RedisClientAdapter` is unchanged.
