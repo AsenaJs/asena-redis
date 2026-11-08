@@ -354,5 +354,48 @@ describe('NodeRedisAdapter', () => {
         logged.mockRestore();
       }
     });
+
+    it('reports a connection error raised while a duplicate is still connecting', async () => {
+      // An EventEmitter with no 'error' listener throws from emit(), which is what node-redis's
+      // socket handler would surface as an uncaught exception.
+      class FakeClient extends EventEmitter {
+        public isReady = false;
+
+        public thrown: unknown[] = [];
+
+        public duplicate(): FakeClient {
+          return new FakeClient();
+        }
+
+        public async connect(): Promise<void> {
+          try {
+            this.emit('error', new Error('connect ECONNREFUSED'));
+          } catch (error) {
+            this.thrown.push(error);
+          }
+
+          this.isReady = true;
+        }
+      }
+
+      class InstrumentedAdapter extends NodeRedisAdapter {}
+
+      const parent = new FakeClient();
+      const logged = spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        const dup = await new InstrumentedAdapter(parent).duplicate();
+        const dupClient = (dup as any).client as FakeClient;
+
+        expect(dup).toBeInstanceOf(InstrumentedAdapter);
+        expect(dupClient).not.toBe(parent);
+        expect(dupClient.thrown).toEqual([]);
+        expect(dup.isConnected).toBe(true);
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(String(logged.mock.calls[0]![0])).toContain('connect ECONNREFUSED');
+      } finally {
+        logged.mockRestore();
+      }
+    });
   });
 });

@@ -129,13 +129,15 @@ export class NodeRedisAdapter implements RedisClientAdapter {
   public async duplicate(): Promise<RedisClientAdapter> {
     const dup = this.client.duplicate();
 
-    await dup.connect();
-
     // `this.constructor`, not the literal class: a user subclass added for instrumentation
     // would otherwise be downgraded to a plain NodeRedisAdapter on every duplicate.
     const Ctor = this.constructor as new (client: typeof dup) => NodeRedisAdapter;
+    // Wrapped before connecting so the 'error' listener already covers the connect itself.
+    const adapter = new Ctor(dup);
 
-    return new Ctor(dup);
+    await adapter.connect();
+
+    return adapter;
   }
 
   // Connection events - node-redis is an EventEmitter, so these map directly.
