@@ -1,4 +1,5 @@
-import { describe, expect, it, beforeAll, afterAll, afterEach } from 'bun:test';
+import { describe, expect, it, beforeAll, afterAll, afterEach, spyOn } from 'bun:test';
+import { EventEmitter } from 'node:events';
 import { NodeRedisAdapter } from '../../lib/adapter/NodeRedisAdapter';
 
 const REDIS_URL = 'redis://localhost:6379';
@@ -289,6 +290,112 @@ describe('NodeRedisAdapter', () => {
       expect(tmp.isConnected).toBe(true);
 
       await tmp.disconnect();
+    });
+  });
+
+  describe('Connection loss', () => {
+    it('reports a dropped connection instead of throwing it, and reconnects', async () => {
+      const tmp = NodeRedisAdapter.create(REDIS_URL);
+      const killer = NodeRedisAdapter.create(REDIS_URL);
+      const uncaught: unknown[] = [];
+      const onUncaught = (error: unknown) => uncaught.push(error);
+      const logged = spyOn(console, 'error').mockImplementation(() => {});
+
+      process.on('uncaughtException', onUncaught);
+
+      try {
+        await tmp.connect();
+        await killer.connect();
+
+        const id = String(await tmp.send('CLIENT', ['ID']));
+
+        // Drops only this test's own connection on the shared server.
+        await killer.send('CLIENT', ['KILL', 'ID', id]);
+
+        const deadline = Date.now() + 5000;
+        let reply: unknown = null;
+
+        while (reply !== 'PONG' && Date.now() < deadline) {
+          await Bun.sleep(50);
+
+          if (tmp.isConnected) reply = await tmp.send('PING', []).catch(() => null);
+        }
+
+        expect(uncaught).toEqual([]);
+        expect(reply).toBe('PONG');
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(String(logged.mock.calls[0]![0])).toContain('NodeRedisAdapter');
+      } finally {
+        process.off('uncaughtException', onUncaught);
+        logged.mockRestore();
+        await tmp.disconnect().catch(() => {});
+        await killer.disconnect();
+      }
+    });
+
+    it('logs one line per outage, not one per failed reconnect attempt', () => {
+      const client = Object.assign(new EventEmitter(), { isReady: false });
+      const logged = spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        expect(new NodeRedisAdapter(client)).toBeInstanceOf(NodeRedisAdapter);
+
+        client.emit('error', new Error('Socket closed unexpectedly'));
+        client.emit('error', new Error('connect ECONNREFUSED'));
+        client.emit('error', new Error('connect ECONNREFUSED'));
+        expect(logged).toHaveBeenCalledTimes(1);
+
+        client.isReady = true;
+        client.emit('ready');
+        client.emit('error', new Error('protocol error while connected'));
+        client.emit('error', new Error('another one while connected'));
+        expect(logged).toHaveBeenCalledTimes(3);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it('reports a connection error raised while a duplicate is still connecting', async () => {
+      // An EventEmitter with no 'error' listener throws from emit(), which is what node-redis's
+      // socket handler would surface as an uncaught exception.
+      class FakeClient extends EventEmitter {
+        public isReady = false;
+
+        public thrown: unknown[] = [];
+
+        public duplicate(): FakeClient {
+          return new FakeClient();
+        }
+
+        public async connect(): Promise<void> {
+          try {
+            this.emit('error', new Error('connect ECONNREFUSED'));
+          } catch (error) {
+            this.thrown.push(error);
+          }
+
+          this.isReady = true;
+        }
+      }
+
+      class InstrumentedAdapter extends NodeRedisAdapter {}
+
+      const parent = new FakeClient();
+      const logged = spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        const dup = await new InstrumentedAdapter(parent).duplicate();
+        const dupClient = (dup as any).client as FakeClient;
+
+        expect(dup).toBeInstanceOf(InstrumentedAdapter);
+        expect(dupClient).not.toBe(parent);
+        expect(dupClient.thrown).toEqual([]);
+        expect(dup.isConnected).toBe(true);
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(String(logged.mock.calls[0]![0])).toContain('connect ECONNREFUSED');
+      } finally {
+        logged.mockRestore();
+      }
     });
   });
 });

@@ -26,6 +26,7 @@ export class NodeRedisAdapter implements RedisClientAdapter {
 
   public constructor(client: any) {
     this.client = client;
+    this.reportConnectionErrors();
   }
 
   /**
@@ -128,13 +129,15 @@ export class NodeRedisAdapter implements RedisClientAdapter {
   public async duplicate(): Promise<RedisClientAdapter> {
     const dup = this.client.duplicate();
 
-    await dup.connect();
-
     // `this.constructor`, not the literal class: a user subclass added for instrumentation
     // would otherwise be downgraded to a plain NodeRedisAdapter on every duplicate.
     const Ctor = this.constructor as new (client: typeof dup) => NodeRedisAdapter;
+    // Wrapped before connecting so the 'error' listener already covers the connect itself.
+    const adapter = new Ctor(dup);
 
-    return new Ctor(dup);
+    await adapter.connect();
+
+    return adapter;
   }
 
   // Connection events - node-redis is an EventEmitter, so these map directly.
@@ -270,5 +273,23 @@ export class NodeRedisAdapter implements RedisClientAdapter {
   public async unsubscribe(channel: string): Promise<void> {
     this.subscriptions.delete(channel);
     await this.client.unsubscribe(channel);
+  }
+
+  // Without an 'error' listener node-redis throws a dropped connection out of the socket handler,
+  // which also skips scheduling the reconnect, so the client stays offline for good.
+  private reportConnectionErrors(): void {
+    let quiet = false;
+
+    this.client.on?.('error', (error: unknown) => {
+      if (quiet) return;
+
+      // Offline, every failed reconnect attempt emits again: one line per outage is enough.
+      quiet = !this.client.isReady;
+      console.error(`NodeRedisAdapter: Redis connection error: ${error instanceof Error ? error.message : error}`);
+    });
+
+    this.client.on?.('ready', () => {
+      quiet = false;
+    });
   }
 }
