@@ -30,4 +30,5 @@ experimentalOperatorPosition = "end"
 singleAttributePerLine = false
 requirePragma = false
 insertPragma = false
+checkIgnorePragma = false
 ignorePatterns = ["*.md"]
