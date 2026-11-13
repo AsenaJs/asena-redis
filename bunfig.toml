@@ -2,10 +2,12 @@
 coverage = true
 coverageSkipTestFiles = true
 
-coveragePathIgnorePatterns = [
-    "dist/**/*.js",
-    "dist/**/*.ts"
-]
+coveragePathIgnorePatterns = ["dist/**/*.js", "dist/**/*.ts"]
 
 [test.reporter]
 junit = "junit.xml"
+
+[fmt]
+printWidth = 120
+singleQuote = true
+ignorePatterns = ["*.md", ".eslintrc.js"]
