@@ -57,6 +57,6 @@ jobs:
           commit-message: 'chore: version packages'
           pr-title: 'chore: version packages'
           create-github-releases: true
+          push-with-git-cli: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'
