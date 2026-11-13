@@ -10,4 +10,4 @@ junit = "junit.xml"
 [fmt]
 printWidth = 120
 singleQuote = true
-ignorePatterns = ["*.md", ".eslintrc.js"]
+ignorePatterns = ["*.md"]
