@@ -5,6 +5,7 @@
   "fixed": [],
   "linked": [],
   "access": "public",
+  "prettier": false,
   "baseBranch": "master",
   "updateInternalDependencies": "patch",
   "ignore": []
