@@ -931,7 +931,7 @@ export class RedisMicroserviceTransport implements MicroserviceTransport {
     const handler = this.messageHandlers.get(context.pattern);
     const replyChannel = entry.fields['r'];
 
-    let reply: { c: string; ok: boolean; d?: unknown; e?: { name: string; message: string } };
+    let reply: { c?: string; ok: boolean; d?: unknown; e?: { name: string; message: string } };
 
     if (!handler) {
       // Stream exists but no local handler (should not happen - streams are derived from handlers)
