@@ -2,10 +2,38 @@
 coverage = true
 coverageSkipTestFiles = true
 
-coveragePathIgnorePatterns = [
-    "dist/**/*.js",
-    "dist/**/*.ts"
-]
+coveragePathIgnorePatterns = ["dist/**/*.js", "dist/**/*.ts"]
 
 [test.reporter]
 junit = "junit.xml"
+
+[fmt]
+printWidth = 120
+singleQuote = true
+tabWidth = 2
+useTabs = false
+endOfLine = "lf"
+semi = true
+trailingComma = "all"
+quoteProps = "as-needed"
+arrowParens = "always"
+bracketSpacing = true
+jsxSingleQuote = false
+bracketSameLine = false
+proseWrap = "preserve"
+htmlWhitespaceSensitivity = "css"
+vueIndentScriptAndStyle = false
+embeddedLanguageFormatting = "auto"
+objectWrap = "preserve"
+experimentalTernaries = false
+experimentalOperatorPosition = "end"
+singleAttributePerLine = false
+requirePragma = false
+insertPragma = false
+checkIgnorePragma = false
+insertFinalNewline = true
+sortImports = false
+jsdoc = false
+sortTailwindcss = false
+sortPackageJson = false
+ignorePatterns = ["*.md"]
